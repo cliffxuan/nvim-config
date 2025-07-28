@@ -1,4 +1,4 @@
-vimfiles
-========
+nvim-config
+===========
 
-cliffxuan's vim files
+cliffxuan's nvim config
