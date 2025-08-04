@@ -4,7 +4,7 @@ function! s:RunCurrentBuffer()
     execute "source " . l:file
     return
   endif
-  if &filetype ==# 'lua' && match(l:file, 'vimfiles') >= 0
+  if &filetype ==# 'lua' && match(l:file, 'nvim-config') >= 0
     execute "source " . l:file
     return
   endif
