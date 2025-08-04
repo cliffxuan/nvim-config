@@ -1,0 +1,16 @@
+--- a/original.py
++++ b/original.py
+@@ -76,10 +76,10 @@
+         console.print(
+             f"[green]✓ Updated {primitives_file} with all type aliases[/green]"
+         )
+-        console.print('[dim]SITE: TypeAlias = Literal["cuda", "rocm"][/dim]')
+-        console.print('[dim]PLATFORM: TypeAlias = Literal["daier", "dusk"][/dim]')
++        console.print('[dim]type SITE = Literal["cuda", "rocm"][/dim]')
++        console.print('[dim]type PLATFORM = Literal["daier", "dusk"][/dim]')
+         console.print(
+-            f"[dim]MIXTURE: TypeAlias with {len(all_mixtures)} mixtures[/dim]"
++            f"[dim]type MIXTURE with {len(all_mixtures)} mixtures[/dim]"
+         )
+ 
+     except Exception as e:

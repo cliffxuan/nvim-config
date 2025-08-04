@@ -115,8 +115,8 @@ describe('Validation Module Tests', function()
     it('should fix variable assignment lines missing context prefix', function()
       local validation = require 'vibe-coding.validation'
 
-      local line, issue = validation._fix_hunk_content_line('mock_get_clusters.return_value = {', 7)
-      assert.are.equal(' mock_get_clusters.return_value = {', line)
+      local line, issue = validation._fix_hunk_content_line('mock_get_mixtures.return_value = {', 7)
+      assert.are.equal(' mock_get_mixtures.return_value = {', line)
       assert.is_not_nil(issue)
       assert.are.equal('context_fix', issue.type)
     end)
@@ -143,8 +143,8 @@ describe('Validation Module Tests', function()
     it('should fix string literals missing context prefix', function()
       local validation = require 'vibe-coding.validation'
 
-      local line, issue = validation._fix_hunk_content_line('"cluster1": {"name": "test"}', 11)
-      assert.are.equal(' "cluster1": {"name": "test"}', line)
+      local line, issue = validation._fix_hunk_content_line('"mixture1": {"name": "test"}', 11)
+      assert.are.equal(' "mixture1": {"name": "test"}', line)
       assert.is_not_nil(issue)
 
       line, issue = validation._fix_hunk_content_line("'single quoted string'", 12)
@@ -287,7 +287,7 @@ def missing_space_function():
         'Expected at least 1 space for context prefix, got: ' .. space_count .. ' in "' .. content .. '"'
       )
       assert.is_not_nil(
-        content:find('clusters = get_clusters(platform)', 1, true),
+        content:find('mixtures = get_mixtures(platform)', 1, true),
         'Expected content to contain target line, got: "' .. content .. '"'
       )
 
@@ -308,7 +308,7 @@ def missing_space_function():
       -- Test a diff with missing line break - original file won't be found
       local test_diff = [[--- nonexistent/file.py
 +++ nonexistent/file.py
-@@ -1,3 +1,3 @@clusters = get_clusters(platform)
+@@ -1,3 +1,3 @@mixtures = get_mixtures(platform)
 -    old_line = value
 +    new_line = value]]
 
@@ -319,14 +319,14 @@ def missing_space_function():
       local target_line = nil
 
       for i, line in ipairs(lines) do
-        if line:find('clusters = get_clusters(platform)', 1, true) then
+        if line:find('mixtures = get_mixtures(platform)', 1, true) then
           target_line = line
           break
         end
       end
 
       assert.is_not_nil(target_line, 'Should find the target line')
-      assert.are.equal(' clusters = get_clusters(platform)', target_line, 'Should have basic space prefix')
+      assert.are.equal(' mixtures = get_mixtures(platform)', target_line, 'Should have basic space prefix')
 
       -- Verify we have the split issue and warning about missing original file
       local has_split_issue = false
@@ -349,12 +349,12 @@ def missing_space_function():
       local test_diff = [[--- app/test.py
 +++ app/test.py
 @@ -1,3 +1,3 @@
--    all_clusters = []
-+    all_cluster_names = []
-     platforms = ["isilon", "vast"]
+-    all_mixtures = []
++    all_mixture_names = []
+     platforms = ["daier", "dusk"]
      
--    if not all_clusters:
-+    if not all_cluster_names:]]
+-    if not all_mixtures:
++    if not all_mixture_names:]]
 
       local fixed_diff, issues = validation.smart_validate_against_original(test_diff)
 
@@ -363,7 +363,7 @@ def missing_space_function():
       for _, issue in ipairs(issues) do
         if
           issue.type == 'file_access'
-          and (issue.message:find('all_clusters', 1, true) or issue.message:find('platforms', 1, true))
+          and (issue.message:find('all_mixtures', 1, true) or issue.message:find('platforms', 1, true))
         then
           has_spurious_file_errors = true
           break

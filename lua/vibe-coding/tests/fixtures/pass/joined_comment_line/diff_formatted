@@ -1,0 +1,10 @@
+--- a/original.js
++++ b/original.js
+@@ -1,5 +1,5 @@
+ const config = {
+   apiUrl: 'https://api.example.com',
+   maxRetries: 3,
+-  timeout: 5000 // Default timeout value
++  timeout: 8000 // Default timeout value (increased)
+ };
+\ No newline at end of file

@@ -24,8 +24,21 @@ while [[ $# -gt 0 ]]; do
   -h | --help)
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -t, --test PATTERN    Run tests matching PATTERN"
+    echo "  -t, --test PATTERN    Run tests or fixtures matching PATTERN"
     echo "  -h, --help           Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0                           # Run all tests"
+    echo "  $0 -t fixtures               # Run all fixture-related test files"
+    echo "  $0 -t validation             # Run validation-related test files"
+    echo "  $0 -t simple_working         # Run fixtures matching 'simple_working'"
+    echo "  $0 -t pass/                  # Run all fixtures in 'pass' category"
+    echo "  $0 -t fail/empty             # Run fixtures matching 'fail/empty'"
+    echo ""
+    echo "Pattern matching works for:"
+    echo "  - Test file names (e.g., 'fixtures', 'validation')"
+    echo "  - Fixture names (e.g., 'simple_working', 'basic_modification')"
+    echo "  - Fixture categories (e.g., 'pass/', 'fail/')"
     exit 0
     ;;
   *)
@@ -58,28 +71,157 @@ if [[ -n "$TEST_PATTERN" ]]; then
   echo "Running tests matching pattern: $TEST_PATTERN"
   echo "========================================"
 
-  # Find test files matching the pattern
+  # First, try to find test files matching the pattern
   MATCHING_FILES=()
   while IFS= read -r -d '' file; do
     MATCHING_FILES+=("$file")
-  done < <(find tests -name "*_spec.lua" \( -path "*${TEST_PATTERN}*" -o -name "*${TEST_PATTERN}*" \) -print0)
+  done < <(find tests -name "*_spec.lua" \( -path "*${TEST_PATTERN}*" -o -name "*${TEST_PATTERN}*" \) -print0 2>/dev/null)
 
-  if [[ ${#MATCHING_FILES[@]} -eq 0 ]]; then
-    echo -e "${RED}No test files matching pattern: $TEST_PATTERN${NC}"
+  # Also search for fixtures matching the pattern
+  MATCHING_FIXTURES=()
+  if [[ -d "tests/fixtures" ]]; then
+    while IFS= read -r -d '' fixture_dir; do
+      fixture_name=$(echo "$fixture_dir" | sed 's|tests/fixtures/||')
+      MATCHING_FIXTURES+=("$fixture_name")
+    done < <(find tests/fixtures -type d -mindepth 2 -maxdepth 2 \( -path "*${TEST_PATTERN}*" -o -name "*${TEST_PATTERN}*" \) -print0 2>/dev/null)
+  fi
+
+  # Check if we found anything
+  if [[ ${#MATCHING_FILES[@]} -eq 0 && ${#MATCHING_FIXTURES[@]} -eq 0 ]]; then
+    echo -e "${RED}No test files or fixtures matching pattern: $TEST_PATTERN${NC}"
+    echo ""
+    echo "Available test files:"
+    find tests -name "*_spec.lua" | sort
+    echo ""
+    echo "Available fixtures:"
+    if [[ -d "tests/fixtures" ]]; then
+      find tests/fixtures -type d -mindepth 2 -maxdepth 2 | sed 's|tests/fixtures/||' | sort
+    fi
     exit 1
   fi
 
-  echo "Found ${#MATCHING_FILES[@]} matching test file(s):"
-  for file in "${MATCHING_FILES[@]}"; do
-    echo "  - $file"
-  done
+  # Show what we found
+  if [[ ${#MATCHING_FILES[@]} -gt 0 ]]; then
+    echo "Found ${#MATCHING_FILES[@]} matching test file(s):"
+    for file in "${MATCHING_FILES[@]}"; do
+      echo "  - $file"
+    done
+  fi
+
+  if [[ ${#MATCHING_FIXTURES[@]} -gt 0 ]]; then
+    echo "Found ${#MATCHING_FIXTURES[@]} matching fixture(s):"
+    for fixture in "${MATCHING_FIXTURES[@]}"; do
+      echo "  - $fixture"
+    done
+  fi
   echo "========================================"
 
-  # Run each matching file and combine output
+  # Run test files first
   {
     for test_file in "${MATCHING_FILES[@]}"; do
       echo "Testing: 	$test_file	"
       run_tests "lua require('plenary.test_harness').test_file('$test_file')"
+    done
+
+    # Then run matching fixtures
+    for fixture_name in "${MATCHING_FIXTURES[@]}"; do
+      echo "Testing fixture: 	$fixture_name	"
+
+      # Create a temporary Lua script to run the fixture
+      TEMP_SCRIPT=$(mktemp --suffix=.lua)
+      trap 'rm -f "$TEMP_SCRIPT"' EXIT
+
+      cat >"$TEMP_SCRIPT" <<EOF
+-- Temporary script to run fixture test: $fixture_name
+local fixture_loader = require('tests.fixtures.fixture_loader_v2')
+
+describe("Fixture: $fixture_name", function()
+  local fixture
+  
+  before_each(function()
+    -- Set up telescope mocks BEFORE requiring the module (copied from fixtures_spec.lua)
+    package.loaded['telescope'] = {
+      pickers = {
+        new = function()
+          return {}
+        end,
+      },
+      finders = {
+        new_table = function()
+          return {}
+        end,
+      },
+      config = { values = { sorter = {
+        get_sorter = function()
+          return {}
+        end,
+      } } },
+      actions = {},
+      ['actions.state'] = {},
+    }
+
+    package.loaded['telescope.pickers'] = {
+      new = function()
+        return {}
+      end,
+    }
+
+    package.loaded['telescope.finders'] = {
+      new_table = function()
+        return {}
+      end,
+    }
+
+    package.loaded['telescope.config'] = {
+      values = { sorter = {
+        get_sorter = function()
+          return {}
+        end,
+      } },
+    }
+
+    package.loaded['telescope.actions'] = {}
+    package.loaded['telescope.actions.state'] = {}
+
+    package.loaded['telescope.previewers'] = {
+      new_termopen_previewer = function()
+        return {}
+      end,
+    }
+
+    package.loaded['telescope.sorters'] = {
+      get_generic_fuzzy_sorter = function()
+        return {}
+      end,
+    }
+
+    -- Clear any existing module cache for the plugin to ensure clean state
+    package.loaded['vibe-coding'] = nil
+    
+    fixture = fixture_loader.load_fixture('$fixture_name')
+  end)
+
+  after_each(function()
+    -- Clean up mocks
+    package.loaded['telescope'] = nil
+    package.loaded['telescope.pickers'] = nil
+    package.loaded['telescope.finders'] = nil
+    package.loaded['telescope.config'] = nil
+    package.loaded['telescope.actions'] = nil
+    package.loaded['telescope.actions.state'] = nil
+    package.loaded['telescope.previewers'] = nil
+    package.loaded['telescope.sorters'] = nil
+    package.loaded['vibe-coding'] = nil
+  end)
+  
+  it("$fixture_name", function()
+    local integration_test_case = fixture_loader.create_integration_test_case(fixture)
+    integration_test_case()
+  end)
+end)
+EOF
+
+      run_tests "lua require('plenary.test_harness').test_file('$TEMP_SCRIPT')"
     done
   }
 else

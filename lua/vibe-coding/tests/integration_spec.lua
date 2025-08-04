@@ -6,61 +6,34 @@ describe('Integration Tests - Full Patch Pipeline', function()
 
   before_each(function()
     -- Set up telescope mocks BEFORE requiring the module
-    package.loaded['telescope'] = {
-      pickers = {
-        new = function()
-          return {}
-        end,
-      },
-      finders = {
-        new_table = function()
-          return {}
-        end,
-      },
-      config = { values = { sorter = {
-        get_sorter = function()
-          return {}
-        end,
-      } } },
-      actions = {},
-      ['actions.state'] = {},
+    local mock_function = function()
+      return {}
+    end
+    local telescope_modules = {
+      'telescope',
+      'telescope.pickers',
+      'telescope.finders',
+      'telescope.config',
+      'telescope.actions',
+      'telescope.actions.state',
+      'telescope.previewers',
+      'telescope.sorters',
     }
 
-    package.loaded['telescope.pickers'] = {
-      new = function()
-        return {}
-      end,
-    }
+    for _, module in ipairs(telescope_modules) do
+      package.loaded[module] = {}
+    end
 
-    package.loaded['telescope.finders'] = {
-      new_table = function()
-        return {}
-      end,
-    }
-
-    package.loaded['telescope.config'] = {
-      values = { sorter = {
-        get_sorter = function()
-          return {}
-        end,
-      } },
-    }
-
-    package.loaded['telescope.actions'] = {}
-
-    package.loaded['telescope.actions.state'] = {}
-
-    package.loaded['telescope.previewers'] = {
-      new_termopen_previewer = function()
-        return {}
-      end,
-    }
-
-    package.loaded['telescope.sorters'] = {
-      get_generic_fuzzy_sorter = function()
-        return {}
-      end,
-    }
+    package.loaded['telescope'].pickers = { new = mock_function }
+    package.loaded['telescope'].finders = { new_table = mock_function }
+    package.loaded['telescope'].config = { values = { sorter = { get_sorter = mock_function } } }
+    package.loaded['telescope'].actions = {}
+    package.loaded['telescope']['actions.state'] = {}
+    package.loaded['telescope.pickers'].new = mock_function
+    package.loaded['telescope.finders'].new_table = mock_function
+    package.loaded['telescope.config'].values = { sorter = { get_sorter = mock_function } }
+    package.loaded['telescope.previewers'].new_termopen_previewer = mock_function
+    package.loaded['telescope.sorters'].get_generic_fuzzy_sorter = mock_function
 
     -- Clear any existing module cache for the plugin to ensure clean state
     package.loaded['vibe-coding'] = nil
@@ -69,15 +42,21 @@ describe('Integration Tests - Full Patch Pipeline', function()
 
   after_each(function()
     -- Clean up mocks
-    package.loaded['telescope'] = nil
-    package.loaded['telescope.pickers'] = nil
-    package.loaded['telescope.finders'] = nil
-    package.loaded['telescope.config'] = nil
-    package.loaded['telescope.actions'] = nil
-    package.loaded['telescope.actions.state'] = nil
-    package.loaded['telescope.previewers'] = nil
-    package.loaded['telescope.sorters'] = nil
-    package.loaded['vibe-coding'] = nil
+    local telescope_modules = {
+      'telescope',
+      'telescope.pickers',
+      'telescope.finders',
+      'telescope.config',
+      'telescope.actions',
+      'telescope.actions.state',
+      'telescope.previewers',
+      'telescope.sorters',
+      'vibe-coding',
+    }
+
+    for _, module in ipairs(telescope_modules) do
+      package.loaded[module] = nil
+    end
   end)
 
   describe('Core Pipeline Function', function()

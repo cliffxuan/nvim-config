@@ -2,13 +2,12 @@
 Test the Python validation implementation to match Lua behavior.
 """
 
-import tempfile
 import sys
-import os
 from pathlib import Path
 
 try:
     import pytest
+
     HAS_PYTEST = True
 except ImportError:
     HAS_PYTEST = False
@@ -24,22 +23,23 @@ from validation import Validation
 _fixture_loader = FixtureLoader()
 _all_fixtures = []
 try:
-    _all_fixtures.extend(_fixture_loader.load_category('pass'))
+    _all_fixtures.extend(_fixture_loader.load_category("pass"))
 except Exception:
     pass
 try:
-    _all_fixtures.extend(_fixture_loader.load_category('fail'))
+    _all_fixtures.extend(_fixture_loader.load_category("fail"))
 except Exception:
     pass
+
 
 def create_test_data_from_fixture(fixture):
     """Create test data from a fixture (compatibility function)."""
     return (
-        fixture.get('original_content', ''),
-        fixture.get('diff_content', ''),
-        fixture.get('expected_content', ''),
-        fixture.get('should_succeed', True),
-        fixture.get('expected_error_pattern', '')
+        fixture.get("original_content", ""),
+        fixture.get("diff_content", ""),
+        fixture.get("expected_content", ""),
+        fixture.get("should_succeed", True),
+        fixture.get("expected_error_pattern", ""),
     )
 
 
@@ -48,7 +48,7 @@ def test_fix_hunk_content_line():
     # Test case 1: Context line missing space prefix (should be fixed)
     input_line = "console.log('hello');"
     fixed_line, issue = Validation.fix_hunk_content_line(input_line, 1)
-    
+
     # Should return the fixed line and create an issue
     assert issue is not None
     assert issue.type == "context_fix"
@@ -91,12 +91,16 @@ def test_generic_approach():
 
     for line in lines_needing_fix:
         fixed_line, issue = Validation.fix_hunk_content_line(line, 1)
-        
+
         # These lines should be treated as context and get a space prefix
-        assert issue is not None, f"Line '{line}' should be detected as needing context fix"
-        assert issue.type == "context_fix", f"Line '{line}' should have context_fix issue"
+        assert issue is not None, (
+            f"Line '{line}' should be detected as needing context fix"
+        )
+        assert issue.type == "context_fix", (
+            f"Line '{line}' should have context_fix issue"
+        )
         assert fixed_line == " " + line, f"Line '{line}' should get space prefix"
-    
+
     # Test cases: lines that are already valid (should not be changed)
     valid_lines = [
         " function test() {",  # already has space prefix
@@ -104,10 +108,10 @@ def test_generic_approach():
         "-console.log('old');",  # removal line
         "",  # empty line
     ]
-    
+
     for line in valid_lines:
         fixed_line, issue = Validation.fix_hunk_content_line(line, 1)
-        
+
         # These lines should not be changed
         assert fixed_line == line, f"Line '{line}' should not be changed"
         assert issue is None, f"Line '{line}' should not have any issues"
@@ -126,25 +130,27 @@ console.log('new');
  }"""
 
     fixed_content, issues = Validation.validate_and_fix_diff(test_diff)
-    
+
     # Should return fixed content and list of issues
     assert isinstance(fixed_content, str)
     assert isinstance(issues, list)
     assert len(issues) >= 1  # Should find at least the missing space prefix issues
-    
+
     # Check that issues are properly formatted Issue objects
     for issue in issues:
-        assert hasattr(issue, 'line')
-        assert hasattr(issue, 'message')
-        assert hasattr(issue, 'type')
+        assert hasattr(issue, "line")
+        assert hasattr(issue, "message")
+        assert hasattr(issue, "type")
 
 
 if HAS_PYTEST:
-    @pytest.mark.parametrize("fixture", _all_fixtures, ids=lambda f: f['name'])
+
+    @pytest.mark.parametrize("fixture", _all_fixtures, ids=lambda f: f["name"])
     def test_validation_fixture_case(fixture):
         """Test individual validation fixture case."""
         _test_validation_fixture_case_impl(fixture)
 else:
+
     def test_validation_fixture_case(fixture):
         """Test individual validation fixture case."""
         _test_validation_fixture_case_impl(fixture)
@@ -174,7 +180,7 @@ def test_validation_with_fixtures(all_fixtures=None):
     """Legacy test function for non-pytest runners."""
     if all_fixtures is None:
         all_fixtures = _all_fixtures
-        
+
     if not all_fixtures:
         print("No fixtures loaded")
         return

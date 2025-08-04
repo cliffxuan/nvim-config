@@ -21,27 +21,27 @@ local problematic_diff = [[--- app/api/v2/cli/main.py
 +++ app/api/v2/cli/main.py
 @@ -4,7 +4,7 @@
 
--    all_clusters = []
-+    all_cluster_names = []
-     platforms: list[PLATFORM] = ["isilon", "vast"]
+-    all_mixtures = []
++    all_mixture_names = []
+     platforms: list[PLATFORM] = ["daier", "dusk"]
 
      for platform in platforms:
-@@ -10,7 +10,7 @@clusters = get_clusters(platform)
--            all_clusters.extend(clusters)
-+            all_cluster_names.extend(clusters.keys())
+@@ -10,7 +10,7 @@mixtures = get_mixtures(platform)
+-            all_mixtures.extend(mixtures)
++            all_mixture_names.extend(mixtures.keys())
              console.print(
-                 f"[blue]Found {len(clusters)} {platform.title()} clusters[/blue]"
+                 f"[blue]Found {len(mixtures)} {platform.title()} mixtures[/blue]"
              )except Exception as e:
-             console.print(f"[red]Error fetching {platform.title()} clusters: {e}[/red]")
+             console.print(f"[red]Error fetching {platform.title()} mixtures: {e}[/red]")
 
--    if not all_clusters:
-+    if not all_cluster_names:
-         console.print("[red]No clusters found, cannot generate type alias[/red]")
+-    if not all_mixtures:
++    if not all_mixture_names:
+         console.print("[red]No mixtures found, cannot generate type alias[/red]")
          return
 
-     # Sort clusters for consistent output
--    all_clusters.sort()
-+    all_cluster_names.sort()]]
+     # Sort mixtures for consistent output
+-    all_mixtures.sort()
++    all_mixture_names.sort()]]
 
 print 'Original problematic diff:'
 print(problematic_diff)
@@ -68,7 +68,7 @@ print '\nFixed diff:'
 print(fixed_diff)
 
 -- Check for expected fixes
-local has_hunk_header_fix = fixed_diff:match '@@ %-10,7 %+10,7 @@\n%s+clusters = get_clusters'
+local has_hunk_header_fix = fixed_diff:match '@@ %-10,7 %+10,7 @@\n%s+mixtures = get_mixtures'
 local has_exception_fix = fixed_diff:match '%)\n%s+except Exception as e:'
 
 print '\n--- Validation Results ---'

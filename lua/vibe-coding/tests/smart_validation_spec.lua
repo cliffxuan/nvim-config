@@ -6,11 +6,11 @@ describe('Smart Validation', function()
     -- Create a temporary test file
     local test_file_path = '/tmp/test_smart_validation_source.py'
     local test_file_content = [[
-def test_get_platform_shares_success(mock_get_clusters, mock_get_cluster_shares):
+def test_get_platform_shares_success(mock_get_mixtures, mock_get_mixture_shares):
     """Test successful retrieval of platform shares."""
     from app.utils.share import get_platform_shares
     
-    # Mock clusters data
+    # Mock mixtures data
 ]]
 
     -- Write the test file
@@ -26,10 +26,10 @@ def test_get_platform_shares_success(mock_get_clusters, mock_get_cluster_shares)
       .. test_file_path
       .. '\n'
       .. '@@ -1,5 +1,5 @@\n'
-      .. ' def test_get_platform_shares_success(mock_get_clusters, mock_get_cluster_shares):"""Test successful retrieval of platform shares."""\n'
+      .. ' def test_get_platform_shares_success(mock_get_mixtures, mock_get_mixture_shares):"""Test successful retrieval of platform shares."""\n'
       .. '     from app.utils.share import get_platform_shares\n'
       .. '     \n'
-      .. '     # Mock clusters data'
+      .. '     # Mock mixtures data'
 
     print 'Testing diff content:'
     print(diff_content)

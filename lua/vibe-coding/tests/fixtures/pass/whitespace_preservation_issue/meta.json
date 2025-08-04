@@ -1,0 +1,7 @@
+{
+  "name": "Whitespace Preservation Issue Fixed",
+  "description": "Real case where leading whitespace preservation was fixed. The diff parser now correctly handles indentation in context lines and hunk header line number parsing.",
+  "should_succeed": true,
+  "tags": ["whitespace", "indentation", "search-pattern", "real-case", "fixed"],
+  "file_path": "tests/fixtures/pass/whitespace_preservation_issue/original.py"
+}

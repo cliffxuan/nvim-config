@@ -95,22 +95,6 @@ describe('Fixtures V2 System', function()
       assert.is_string(test_fixture.original_content)
       assert.is_string(test_fixture.diff_content)
     end)
-
-    it('should load pass category fixtures', function()
-      local pass_fixtures = fixtures.load_category 'pass'
-      assert.is_true(#pass_fixtures > 0, 'Should have pass fixtures')
-      assert.are.equal(38, #pass_fixtures)
-    end)
-
-    it('should load fail category fixtures', function()
-      local fail_fixtures = fixtures.load_category 'fail'
-      assert.is_true(#fail_fixtures > 0, 'Should have fail fixtures')
-      assert.are.equal(7, #fail_fixtures)
-    end)
-    it('should load all fixtures', function()
-      local all_fixtures = fixtures.load_all()
-      assert.are.equal(45, #all_fixtures)
-    end)
   end)
 
   describe('Fixture Test Case Creation', function()

@@ -8,6 +8,8 @@ import re
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+from validation import Validation
+
 
 @dataclass
 class Hunk:
@@ -35,7 +37,7 @@ class Patcher:
         Preprocess diff lines to handle malformed content like missing linebreaks.
 
         This handles cases like:
-        - Hunk headers joined with content: "@@ -10,7 +10,7 @@clusters = get_clusters(platform)"
+        - Hunk headers joined with content: "@@ -10,7 +10,7 @@mixtures = get_mixtures(platform)"
         - Context lines joined together: "             )except Exception as e:"
 
         Args:
@@ -138,7 +140,7 @@ class Patcher:
         # If the content looks like it's inside a function or block, use 12 spaces
         if (
             "get_" in content
-            or "clusters" in content
+            or "mixtures" in content
             or any(
                 keyword in content for keyword in ["if", "for", "try", "with", "except"]
             )
@@ -215,7 +217,7 @@ class Patcher:
     @staticmethod
     def parse_diff(diff_content: str) -> Tuple[Optional[ParsedDiff], Optional[str]]:
         """
-        Parse a unified diff block.
+        Parse a unified diff block with enhanced validation.
 
         Args:
             diff_content: The string content of the diff
@@ -223,8 +225,13 @@ class Patcher:
         Returns:
             Tuple of (parsed_diff, error_message)
         """
+        # Use enhanced validation to fix whitespace and other issues
+        validated_diff, validation_issues = Validation.validate_and_fix_diff(
+            diff_content
+        )
+
         # Pre-process diff content to handle malformed hunk headers and joined lines
-        original_lines = diff_content.split("\n")
+        original_lines = validated_diff.split("\n")
         lines = Patcher._preprocess_diff_lines(original_lines)
 
         if len(lines) < 3:

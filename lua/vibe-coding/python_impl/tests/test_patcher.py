@@ -3,12 +3,13 @@ Test the Python patcher implementation to match Lua behavior.
 """
 
 import os
-import tempfile
 import sys
+import tempfile
 from pathlib import Path
 
 try:
     import pytest
+
     HAS_PYTEST = True
 except ImportError:
     HAS_PYTEST = False
@@ -18,28 +19,29 @@ parent_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_dir))
 
 from fixture_loader_v2 import FixtureLoader
-from patcher import Patcher, Hunk
+from patcher import Hunk, Patcher
 
 # Load all fixtures once
 _fixture_loader = FixtureLoader()
 _all_fixtures = []
 try:
-    _all_fixtures.extend(_fixture_loader.load_category('pass'))
+    _all_fixtures.extend(_fixture_loader.load_category("pass"))
 except Exception:
     pass
 try:
-    _all_fixtures.extend(_fixture_loader.load_category('fail'))
+    _all_fixtures.extend(_fixture_loader.load_category("fail"))
 except Exception:
     pass
+
 
 def create_test_data_from_fixture(fixture):
     """Create test data from a fixture (compatibility function)."""
     return (
-        fixture.get('original_content', ''),
-        fixture.get('diff_content', ''),
-        fixture.get('expected_content', ''),
-        fixture.get('should_succeed', True),
-        fixture.get('expected_error_pattern', '')
+        fixture.get("original_content", ""),
+        fixture.get("diff_content", ""),
+        fixture.get("expected_content", ""),
+        fixture.get("should_succeed", True),
+        fixture.get("expected_error_pattern", ""),
     )
 
 
@@ -148,11 +150,13 @@ def test_apply_hunk():
 
 
 if HAS_PYTEST:
-    @pytest.mark.parametrize("fixture", _all_fixtures, ids=lambda f: f['name'])
+
+    @pytest.mark.parametrize("fixture", _all_fixtures, ids=lambda f: f["name"])
     def test_patcher_fixture_case(fixture):
         """Test individual patcher fixture case."""
         _test_patcher_fixture_case_impl(fixture)
 else:
+
     def test_patcher_fixture_case(fixture):
         """Test individual patcher fixture case."""
         _test_patcher_fixture_case_impl(fixture)
@@ -172,9 +176,7 @@ def _test_patcher_fixture_case_impl(fixture):
     if should_succeed:
         assert parse_error is None, f"Parse failed - {parse_error}"
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".test", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".test", delete=False) as f:
             f.write(original_content)
             temp_file = f.name
 
@@ -217,7 +219,7 @@ def test_patcher_with_fixtures(all_fixtures=None):
     """Legacy test function for non-pytest runners."""
     if all_fixtures is None:
         all_fixtures = _all_fixtures
-        
+
     if not all_fixtures:
         print("No fixtures loaded")
         return
@@ -234,9 +236,13 @@ def test_patcher_with_fixtures(all_fixtures=None):
             print(f"❌ {fixture['name']}: {str(e)}")
 
     print(f"Fixture tests: {passed} passed, {failed} failed")
-    
+
     # Only fail if more than 50% of tests fail (indicating core functionality issues)
     if failed > passed:
-        raise AssertionError(f"Majority of fixture tests failed: {failed} failures vs {passed} passed")
+        raise AssertionError(
+            f"Majority of fixture tests failed: {failed} failures vs {passed} passed"
+        )
     else:
-        print(f"Core functionality working ({passed}/{passed+failed} fixtures passing)")
+        print(
+            f"Core functionality working ({passed}/{passed + failed} fixtures passing)"
+        )

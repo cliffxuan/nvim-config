@@ -1,6 +1,6 @@
 -- Test case reproducing the real hunk header issue
 -- This test reproduces the exact problem reported:
--- "error: patch fragment without header at line 13: @@ -148,18 +148,18 @@clusters = get_clusters(platform)"
+-- "error: patch fragment without header at line 13: @@ -148,18 +148,18 @@mixtures = get_mixtures(platform)"
 
 describe('Real Hunk Header Issue Reproduction', function()
   local Validation
@@ -37,27 +37,27 @@ describe('Real Hunk Header Issue Reproduction', function()
 +++ app/api/v2/cli/main.py
 @@ -4,7 +4,7 @@
 
--    all_clusters = []
-+    all_cluster_names = []
-     platforms: list[PLATFORM] = ["isilon", "vast"]
+-    all_mixtures = []
++    all_mixture_names = []
+     platforms: list[PLATFORM] = ["daier", "dusk"]
 
      for platform in platforms:
-@@ -10,7 +10,7 @@clusters = get_clusters(platform)
--            all_clusters.extend(clusters)
-+            all_cluster_names.extend(clusters.keys())
+@@ -10,7 +10,7 @@mixtures = get_mixtures(platform)
+-            all_mixtures.extend(mixtures)
++            all_mixture_names.extend(mixtures.keys())
              console.print(
-                 f"[blue]Found {len(clusters)} {platform.title()} clusters[/blue]"
+                 f"[blue]Found {len(mixtures)} {platform.title()} mixtures[/blue]"
              )except Exception as e:
-             console.print(f"[red]Error fetching {platform.title()} clusters: {e}[/red]")
+             console.print(f"[red]Error fetching {platform.title()} mixtures: {e}[/red]")
 
--    if not all_clusters:
-+    if not all_cluster_names:
-         console.print("[red]No clusters found, cannot generate type alias[/red]")
+-    if not all_mixtures:
++    if not all_mixture_names:
+         console.print("[red]No mixtures found, cannot generate type alias[/red]")
          return
 
-     # Sort clusters for consistent output
--    all_clusters.sort()
-+    all_cluster_names.sort()]]
+     # Sort mixtures for consistent output
+-    all_mixtures.sort()
++    all_mixture_names.sort()]]
 
     -- Run the validation pipeline
     local fixed_diff, issues = Validation.process_diff(problematic_diff)
@@ -83,12 +83,12 @@ describe('Real Hunk Header Issue Reproduction', function()
     assert.is_true(has_hunk_header_issue, 'Should detect hunk header issue')
 
     -- Verify the fix: hunk header should be separated (check that the pattern is fixed)
-    local has_proper_separation = fixed_diff:match '@@ %-10,7 %+10,7 @@[^c]*clusters = get_clusters'
+    local has_proper_separation = fixed_diff:match '@@ %-10,7 %+10,7 @@[^c]*mixtures = get_mixtures'
     print('Has proper hunk separation: ' .. tostring(has_proper_separation ~= nil))
 
     -- The key test: the original joined line should now be split
-    local original_broken = problematic_diff:match '@@ %-10,7 %+10,7 @@clusters'
-    local now_fixed = not fixed_diff:match '@@ %-10,7 %+10,7 @@clusters'
+    local original_broken = problematic_diff:match '@@ %-10,7 %+10,7 @@mixtures'
+    local now_fixed = not fixed_diff:match '@@ %-10,7 %+10,7 @@mixtures'
 
     assert.is_true(original_broken ~= nil, 'Original should have the broken pattern')
     assert.is_true(now_fixed, 'Fixed diff should not have the broken pattern')

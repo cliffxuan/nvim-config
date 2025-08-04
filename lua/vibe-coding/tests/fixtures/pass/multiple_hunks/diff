@@ -1,0 +1,15 @@
+--- a/calculator.py
++++ b/calculator.py
+@@ ... @@
+ class Calculator:
+     def __init__(self):
+         self.result = 0
++        self.history = []
+
+@@ ... @@
+
+     def divide(self, x, y):
+-        return x / y
++        if y == 0:
++            raise ValueError("Cannot divide by zero")
++        return x / y

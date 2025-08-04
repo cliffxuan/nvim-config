@@ -226,7 +226,7 @@ end
 -- @param line The line to normalize.
 -- @return string The normalized line.
 function HunkMatcher:_normalize_line(line)
-  if line:match('^%s*$') then
+  if line:match '^%s*$' then
     return ''
   end
   return line
@@ -260,7 +260,7 @@ function HunkMatcher:_fuzzy_match(search_lines, modified_lines)
   -- Create non-blank line patterns for fuzzy matching
   local search_non_blank = {}
   for _, line in ipairs(search_lines) do
-    if not line:match('^%s*$') then
+    if not line:match '^%s*$' then
       table.insert(search_non_blank, line)
     end
   end
@@ -292,7 +292,7 @@ function HunkMatcher:_try_fuzzy_match_at_position(search_non_blank, modified_lin
 
   -- Collect non-blank lines from file starting at start_pos
   for i = start_pos, #modified_lines do
-    if not modified_lines[i]:match('^%s*$') then
+    if not modified_lines[i]:match '^%s*$' then
       table.insert(file_non_blank, modified_lines[i])
       if #file_non_blank == #search_non_blank then
         end_pos = i
@@ -436,7 +436,7 @@ function HunkMatcher:_handle_buffer_refresh(buf_id, filepath)
   if modified then
     -- Ask user what to do with modified buffer
     local choice = vim.fn.confirm(
-      'Buffer for "' .. vim.fn.fnamodify(filepath, ':t') .. '" has unsaved changes.\nReload with patch changes?',
+      'Buffer for "' .. vim.fn.fnamemodify(filepath, ':t') .. '" has unsaved changes.\nReload with patch changes?',
       '&Reload\n&Keep current\n&Cancel',
       1
     )
@@ -444,16 +444,16 @@ function HunkMatcher:_handle_buffer_refresh(buf_id, filepath)
       vim.api.nvim_buf_call(buf_id, function()
         vim.cmd 'edit!'
       end)
-      vim.notify('[Vibe] Reloaded buffer: ' .. vim.fn.fnamodify(filepath, ':t'), vim.log.levels.INFO)
+      vim.notify('[Vibe] Reloaded buffer: ' .. vim.fn.fnamemodify(filepath, ':t'), vim.log.levels.INFO)
     elseif choice == 2 then -- Keep current
-      vim.notify('[Vibe] Kept current buffer changes: ' .. vim.fn.fnamodify(filepath, ':t'), vim.log.levels.INFO)
+      vim.notify('[Vibe] Kept current buffer changes: ' .. vim.fn.fnamemodify(filepath, ':t'), vim.log.levels.INFO)
     end
   else
     -- Buffer is not modified, safe to reload
     vim.api.nvim_buf_call(buf_id, function()
       vim.cmd 'edit!'
     end)
-    vim.notify('[Vibe] Refreshed buffer: ' .. vim.fn.fnamodify(filepath, ':t'), vim.log.levels.INFO)
+    vim.notify('[Vibe] Refreshed buffer: ' .. vim.fn.fnamemodify(filepath, ':t'), vim.log.levels.INFO)
   end
 end
 

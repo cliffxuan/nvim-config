@@ -50,7 +50,22 @@ function VibePatcher.parse_diff(diff_content)
       if current_hunk then
         table.insert(diff.hunks, current_hunk)
       end
-      current_hunk = { header = line, lines = {} }
+
+      -- Parse line numbers from hunk header
+      local old_start, old_lines, new_start, new_lines = line:match '^@@ %-(%d+),?(%d*) %+(%d+),?(%d*) @@'
+      if not old_start then
+        -- Try simpler format without line counts
+        old_start, new_start = line:match '^@@ %-(%d+) %+(%d+) @@'
+      end
+
+      current_hunk = {
+        header = line,
+        lines = {},
+        old_start = tonumber(old_start),
+        old_lines = tonumber(old_lines) or 1,
+        new_start = tonumber(new_start),
+        new_lines = tonumber(new_lines) or 1,
+      }
     -- Handle diff content lines when we have a current hunk
     elseif current_hunk then
       -- Direct match for addition/removal/context lines
@@ -241,6 +256,142 @@ function VibePatcher.validate_and_fix_diff(diff_content)
   return Validation.process_diff(diff_content)
 end
 
+--- Extracts the original file path from diff content headers.
+-- @param diff_content The raw diff content.
+-- @return string|nil: The original file path, or nil if not found.
+function VibePatcher.extract_original_file_path(diff_content)
+  local lines = vim.split(diff_content, '\n', { plain = true })
+
+  for _, line in ipairs(lines) do
+    -- Look for the --- header line
+    if line:match '^---' then
+      local file_path = line:match '^---%s+(.*)$'
+      if file_path and file_path ~= '/dev/null' then
+        -- Clean up common VCS prefixes (a/, b/, etc.)
+        file_path = file_path:gsub('^[a-z]/(.+)', '%1')
+
+        -- Check if it's a valid file path
+        if vim.fn.filereadable(file_path) == 1 then
+          return file_path
+        end
+
+        -- Try resolving relative paths
+        local cwd = vim.fn.getcwd()
+        local full_path = cwd .. '/' .. file_path
+        if vim.fn.filereadable(full_path) == 1 then
+          return full_path
+        end
+      end
+      break
+    end
+  end
+
+  return nil
+end
+
+--- Fixes diff content using the external fix_diff.py command line tool.
+-- @param diff_content The raw diff content to fix.
+-- @param original_file_path Optional path to the original file for context.
+-- @return string, table: The fixed diff content and any issues found.
+function VibePatcher.fix_diff_with_external_tool(diff_content, original_file_path)
+  local issues = {}
+
+  -- If no original file path provided, try to extract it from diff headers
+  if not original_file_path then
+    original_file_path = VibePatcher.extract_original_file_path(diff_content)
+  end
+
+  -- Path to the fix_diff.py script
+  local script_dir = vim.fn.fnamemodify(vim.fn.resolve(vim.env.MYVIMRC), ':h') .. '/lua/vibe-coding/python_impl'
+  local fix_diff_script = script_dir .. '/fix_diff.py'
+
+  -- Check if the script exists
+  if vim.fn.filereadable(fix_diff_script) == 0 then
+    table.insert(issues, {
+      line = 1,
+      type = 'script_not_found',
+      message = 'fix_diff.py script not found at: ' .. fix_diff_script,
+      severity = 'error',
+    })
+    return diff_content, issues
+  end
+
+  -- Check if original file exists (needed for fix_diff.py)
+  if not original_file_path or vim.fn.filereadable(original_file_path) == 0 then
+    table.insert(issues, {
+      line = 1,
+      type = 'original_file_not_found',
+      message = 'Original file not found: ' .. (original_file_path or 'nil'),
+      severity = 'warning',
+    })
+    -- Fallback to the existing validation pipeline
+    return Validation.process_diff(diff_content)
+  end
+
+  -- Create temporary file for the diff content
+  local temp_diff_file = vim.fn.tempname() .. '.diff'
+  local temp_diff_lines = vim.split(diff_content, '\n')
+
+  -- Write diff content to temporary file
+  local success, write_err = Utils.write_file(temp_diff_file, temp_diff_lines)
+  if not success then
+    table.insert(issues, {
+      line = 1,
+      type = 'temp_file_error',
+      message = 'Failed to write temporary diff file: ' .. (write_err or 'unknown error'),
+      severity = 'error',
+    })
+    return diff_content, issues
+  end
+
+  -- Execute fix_diff.py
+  local cmd = string.format(
+    'python "%s" "%s" "%s"',
+    vim.fn.shellescape(fix_diff_script),
+    vim.fn.shellescape(temp_diff_file),
+    vim.fn.shellescape(original_file_path)
+  )
+
+  local result = vim.fn.system(cmd)
+  local exit_code = vim.v.shell_error
+
+  -- Clean up temporary file
+  vim.fn.delete(temp_diff_file)
+
+  -- Check if the command executed successfully
+  if exit_code ~= 0 then
+    table.insert(issues, {
+      line = 1,
+      type = 'fix_script_error',
+      message = 'fix_diff.py failed with exit code ' .. exit_code .. ': ' .. result,
+      severity = 'error',
+    })
+    -- Fallback to the existing validation pipeline
+    return Validation.process_diff(diff_content)
+  end
+
+  -- If result is empty or just whitespace, fallback to original validation
+  if not result or result:match '^%s*$' then
+    table.insert(issues, {
+      line = 1,
+      type = 'empty_result',
+      message = 'fix_diff.py returned empty result, using validation fallback',
+      severity = 'info',
+    })
+    return Validation.process_diff(diff_content)
+  end
+
+  -- Success! Add info issue to track that external tool was used
+  table.insert(issues, {
+    line = 1,
+    type = 'external_tool_used',
+    message = 'Diff processed successfully with fix_diff.py external tool',
+    severity = 'info',
+  })
+
+  return result, issues
+end
+
 --- Formats diff content for better readability and standards compliance.
 -- @param diff_content The diff content to format.
 -- @return string: The formatted diff content.
@@ -397,12 +548,46 @@ function VibePatcher.review_diff_interactive(diff_content, issues, callback)
     local final_diff = table.concat(diff_lines, '\n')
     print('[INFO] diff:\n' .. final_diff)
 
-    -- Close the review tab
-    vim.cmd 'tabclose'
+    -- Try to apply the diff using process_and_apply_patch
+    local result = VibePatcher.process_and_apply_patch(final_diff, {
+      silent = false,
+      debug = false,
+    })
 
-    -- Call the callback with the edited diff
-    if callback then
-      callback(final_diff)
+    if result.success then
+      -- Success: close the review tab and notify
+      vim.notify('[Vibe] ✓ Diff applied successfully!', vim.log.levels.INFO)
+      vim.cmd 'tabclose'
+
+      -- Call the callback to indicate success (optional cleanup)
+      if callback then
+        callback(final_diff)
+      end
+    else
+      -- Failure: keep the review tab open and show the error
+      vim.notify('[Vibe] ✗ Failed to apply diff: ' .. (result.message or 'Unknown error'), vim.log.levels.ERROR)
+      vim.notify('[Vibe] Review tab kept open. Edit the diff and try :VibeApplyDiff again', vim.log.levels.INFO)
+
+      -- Optionally add the error information to the buffer as comments
+      local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      local error_info = {
+        '',
+        '# ===== LAST APPLICATION ATTEMPT FAILED =====',
+        '# Error: ' .. (result.message or 'Unknown error'),
+        '# Edit the diff above and run :VibeApplyDiff again',
+        '# Use :q to cancel and close this review',
+      }
+
+      -- Insert error info at the top (after existing header)
+      local insert_pos = 1
+      for i, line in ipairs(current_lines) do
+        if line == '# ===== DIFF CONTENT BELOW =====' then
+          insert_pos = i
+          break
+        end
+      end
+
+      vim.api.nvim_buf_set_lines(buf, insert_pos, insert_pos, false, error_info)
     end
   end, { desc = 'Apply the reviewed diff' })
 
@@ -480,7 +665,7 @@ function VibePatcher.review_diff_interactive(diff_content, issues, callback)
     end
 
     local current_diff = table.concat(diff_lines, '\n')
-    local _, new_issues = VibePatcher.validate_and_fix_diff(current_diff)
+    local _, new_issues = VibePatcher.fix_diff_with_external_tool(current_diff)
 
     -- Update the buffer with new validation results
     update_buffer_with_issues(new_issues, current_diff)
@@ -589,7 +774,7 @@ function VibePatcher.review_and_apply_patches_from_last_response(messages)
   -- Process each diff block with validation
   for _, diff_content in ipairs(diff_blocks) do
     -- Validate the diff content first to get issues
-    local validated_diff, validation_issues = VibePatcher.validate_and_fix_diff(diff_content)
+    local validated_diff, validation_issues = VibePatcher.fix_diff_with_external_tool(diff_content)
 
     -- Open interactive review with validation issues
     VibePatcher.review_diff_interactive(validated_diff, validation_issues, function(reviewed_diff)
@@ -599,7 +784,7 @@ function VibePatcher.review_and_apply_patches_from_last_response(messages)
       end
 
       -- Re-validate the reviewed diff (user might have edited in review)
-      local final_validated_diff, final_validation_issues = VibePatcher.validate_and_fix_diff(reviewed_diff)
+      local final_validated_diff, final_validation_issues = VibePatcher.fix_diff_with_external_tool(reviewed_diff)
 
       -- Parse and apply the final validated diff
       local parsed_diff, parse_err = VibePatcher.parse_diff(final_validated_diff)
@@ -745,8 +930,10 @@ function VibePatcher.process_and_apply_patch(diff_content, options)
     applied_with_external_tool = false,
   }
 
-  -- Step 1: Validate and fix the diff content
-  local validated_diff, validation_issues = VibePatcher.validate_and_fix_diff(diff_content)
+  -- Step 1: Fix diff content using external tool (with fallback to validation pipeline)
+  local validated_diff, validation_issues = VibePatcher.fix_diff_with_external_tool(diff_content)
+  print('diff_content' .. diff_content)
+  print('validated_diff' .. validated_diff)
   result.validated_diff = validated_diff
   result.validation_issues = validation_issues
 

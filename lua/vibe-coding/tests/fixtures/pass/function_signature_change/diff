@@ -1,0 +1,8 @@
+--- a/allocation.py
++++ b/allocation.py
+@@ -1,4 +1,4 @@
+-def update_allocation(mixture: str, name: str, allocation: Allocation):
++def update_allocation(mixture: str, name: str, allocation: str):
+     """Update allocation for a mixture resource"""
+     key = f"{REDIS_PREFIX}:shirt:{mixture}:{name}"
+     data: str | None = redis_client.get(key)

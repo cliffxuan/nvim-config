@@ -1,0 +1,30 @@
+--- app/api/v2/routes.py
++++ app/api/v2/routes.py
+@@ -4,7 +4,7 @@
+     response_model=Allocation,
+     dependencies=[Depends(check_operator_permission)],
+ )
+-def update_allocation(mixture: str, name: str, allocation: Allocation):
++def update_allocation(mixture: str, name: str, allocation: str):
+     key = f"{REDIS_PREFIX}:shirt:{mixture}:{name}"
+     data: str | None = redis_client.get(key)  # type: ignore
+     if not data:
+@@ -12,7 +12,7 @@
+ 
+     # Get existing shirt data and update the quota
+     shirt_data = json.loads(data)
+-    shirt_data["quota_hard_threshold"] = allocation.allocation
++    shirt_data["quota_hard_threshold"] = allocation
+ 
+     # Save updated shirt back to Redis
+     redis_client.set(key, json.dumps(shirt_data))
+@@ -17,4 +17,8 @@
+     # Save updated shirt back to Redis
+     redis_client.set(key, json.dumps(shirt_data))
+ 
+-    return allocation
++    return Allocation(
++        name=name,
++        mixture=mixture,
++        allocation=allocation,
++    )

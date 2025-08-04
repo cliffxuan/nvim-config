@@ -323,12 +323,12 @@ describe('Vibe-Coding Plugin Unit Tests', function()
 
       it('should handle context lines before and after changes correctly', function()
         local original_content = [[@allocation_router.put(
-    "/{cluster}/{name}",
+    "/{mixture}/{name}",
     response_model=Allocation,
     dependencies=[Depends(check_operator_permission)],
 )
-def update_allocation(cluster: str, name: str, allocation: Allocation):
-    key = f"{REDIS_PREFIX}:share:{cluster}:{name}"
+def update_allocation(mixture: str, name: str, allocation: Allocation):
+    key = f"{REDIS_PREFIX}:share:{mixture}:{name}"
     data: str | None = redis_client.get(key)  # type: ignore]]
 
         local mocks = setup_file_mocks(original_content)
@@ -341,13 +341,13 @@ def update_allocation(cluster: str, name: str, allocation: Allocation):
             {
               lines = {
                 ' @allocation_router.put(',
-                '     "/{cluster}/{name}",',
+                '     "/{mixture}/{name}",',
                 '     response_model=Allocation,',
                 '     dependencies=[Depends(check_operator_permission)],',
                 ' )',
-                '-def update_allocation(cluster: str, name: str, allocation: Allocation):',
-                '+def update_allocation(cluster: str, name: str, allocation: str):',
-                '     key = f"{REDIS_PREFIX}:share:{cluster}:{name}"',
+                '-def update_allocation(mixture: str, name: str, allocation: Allocation):',
+                '+def update_allocation(mixture: str, name: str, allocation: str):',
+                '     key = f"{REDIS_PREFIX}:share:{mixture}:{name}"',
                 '     data: str | None = redis_client.get(key)  # type: ignore',
               },
             },
@@ -356,12 +356,12 @@ def update_allocation(cluster: str, name: str, allocation: Allocation):
 
         local expected_content_lines = {
           '@allocation_router.put(',
-          '    "/{cluster}/{name}",',
+          '    "/{mixture}/{name}",',
           '    response_model=Allocation,',
           '    dependencies=[Depends(check_operator_permission)],',
           ')',
-          'def update_allocation(cluster: str, name: str, allocation: str):',
-          '    key = f"{REDIS_PREFIX}:share:{cluster}:{name}"',
+          'def update_allocation(mixture: str, name: str, allocation: str):',
+          '    key = f"{REDIS_PREFIX}:share:{mixture}:{name}"',
           '    data: str | None = redis_client.get(key)  # type: ignore',
         }
 
@@ -492,8 +492,8 @@ def update_allocation(cluster: str, name: str, allocation: Allocation):
           hunks = {
             {
               lines = {
-                '-def update_allocation(cluster: str, name: str, allocation: Allocation):',
-                '+def update_allocation(cluster: str, name: str, allocation: str):',
+                '-def update_allocation(mixture: str, name: str, allocation: Allocation):',
+                '+def update_allocation(mixture: str, name: str, allocation: str):',
               },
             },
           },
@@ -505,11 +505,11 @@ def update_allocation(cluster: str, name: str, allocation: Allocation):
         assert.is_false(success, 'Expected apply_diff to fail when hunk cannot be found')
         local expected_error_msg = 'Failed to apply hunk #1 to test.txt.\n'
           .. 'Hunk content:\n'
-          .. '-def update_allocation(cluster: str, name: str, allocation: Allocation):\n'
-          .. '+def update_allocation(cluster: str, name: str, allocation: str):\n'
+          .. '-def update_allocation(mixture: str, name: str, allocation: Allocation):\n'
+          .. '+def update_allocation(mixture: str, name: str, allocation: str):\n'
           .. '\n'
           .. 'Searching for pattern:\n'
-          .. 'def update_allocation(cluster: str, name: str, allocation: Allocation):\n'
+          .. 'def update_allocation(mixture: str, name: str, allocation: Allocation):\n'
           .. '\n'
           .. 'Could not find this context in the file.'
         assert.are.equal(expected_error_msg, msg)

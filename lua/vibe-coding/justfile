@@ -48,7 +48,7 @@ clean:
 # Run tests with specific pattern
 test-pattern pattern:
     @echo "🎯 Running tests matching pattern: {{pattern}}"
-    ./tests/run_tests.sh --test "{{pattern}}"
+    ./tests/run_tests.sh -t "{{pattern}}"
 
 # Quick test run (alias for test)
 t *args="":
@@ -85,7 +85,7 @@ help:
     @echo "=============================="
     @echo ""
     @echo "Test Commands:"
-    @echo "  test [args]          Run all tests"
+    @echo "  test [args]          Run all tests (supports -t pattern)"
     @echo "  test-pattern <pat>   Run tests matching pattern"
     @echo "  t [args]             Quick test alias"
     @echo ""
@@ -105,6 +105,7 @@ help:
     @echo ""
     @echo "Examples:"
     @echo "  just test            # Run all tests"
+    @echo "  just test -t fixtures # Run fixture tests"
     @echo "  just coverage        # Run with coverage"
     @echo "  just test-pattern validation  # Run validation tests only"
     @echo "  just dev             # Full development workflow"

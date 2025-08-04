@@ -2,6 +2,7 @@
 -- Consolidated validation pipeline for diff processing
 
 local PathUtils = require 'vibe-coding.path_utils'
+local Utils = require 'vibe-coding.utils'
 
 local Validation = {}
 
@@ -12,6 +13,7 @@ function Validation.process_diff(diff_content)
   local pipeline = {
     Validation.fix_file_paths,
     Validation.smart_validate_against_original,
+    Validation.fix_context_whitespace,
     Validation.validate_and_fix_diff,
     Validation.format_diff,
   }
@@ -411,9 +413,16 @@ function Validation.smart_validate_against_original(diff_content)
 
   local current_file = nil
   local original_lines = nil
+  local current_hunk_start = nil
 
   for i, line in ipairs(lines) do
-    local process_result = Validation._process_line_for_smart_validation(line, i, current_file, original_lines, issues)
+    -- Track hunk headers to get hint information
+    if line:match '^@@' then
+      local old_start = line:match '^@@ %-(%d+)'
+      current_hunk_start = old_start and tonumber(old_start) or nil
+    end
+
+    local process_result = Validation._process_line_for_smart_validation(line, i, current_file, original_lines, issues, current_hunk_start)
 
     -- Update current file tracking
     if process_result.current_file then
@@ -436,8 +445,9 @@ end
 -- @param current_file Current file being tracked
 -- @param original_lines Original file lines if available
 -- @param issues Issues table to append to
+-- @param hint_line_num Hint for expected line number in original file
 -- @return table: Result with fixed_lines, current_file, original_lines
-function Validation._process_line_for_smart_validation(line, line_num, current_file, original_lines, issues)
+function Validation._process_line_for_smart_validation(line, line_num, current_file, original_lines, issues, hint_line_num)
   local result = {
     fixed_lines = { line },
     current_file = nil,
@@ -501,7 +511,7 @@ function Validation._process_line_for_smart_validation(line, line_num, current_f
 
       -- Process the content after as a context line if we have original file
       if original_lines then
-        local content_result = Validation._process_context_line(content_after, line_num, original_lines, issues, false)
+        local content_result = Validation._process_context_line(content_after, line_num, original_lines, issues, false, hint_line_num)
         -- Add the processed content lines
         for _, content_line in ipairs(content_result.fixed_lines) do
           table.insert(result.fixed_lines, content_line)
@@ -523,7 +533,7 @@ function Validation._process_line_for_smart_validation(line, line_num, current_f
 
   -- Process context lines in hunks (both properly formatted and missing space prefix)
   if line:match '^%s' and original_lines then
-    return Validation._process_context_line(line, line_num, original_lines, issues, true)
+    return Validation._process_context_line(line, line_num, original_lines, issues, true, hint_line_num)
   end
 
   -- Also check lines that should be context but are missing the space prefix
@@ -534,7 +544,7 @@ function Validation._process_line_for_smart_validation(line, line_num, current_f
     and not line:match '^---'
     and line ~= ''
   then
-    return Validation._process_context_line(line, line_num, original_lines, issues, false)
+    return Validation._process_context_line(line, line_num, original_lines, issues, false, hint_line_num)
   end
 
   return result
@@ -546,11 +556,12 @@ end
 -- @param original_lines Original file lines
 -- @param issues Issues table to append to
 -- @param has_space_prefix Whether the line already has a space prefix
+-- @param hint_line_num Hint for expected line number in original file
 -- @return table: Result with fixed_lines array
-function Validation._process_context_line(line, line_num, original_lines, issues, has_space_prefix)
+function Validation._process_context_line(line, line_num, original_lines, issues, has_space_prefix, hint_line_num)
   local result = { fixed_lines = {} }
   local context_text = has_space_prefix and line:sub(2) or line
-  local issue = Validation._validate_context_against_original(context_text, original_lines, line_num)
+  local issue = Validation._validate_context_against_original(context_text, original_lines, line_num, hint_line_num)
 
   if not issue then
     table.insert(result.fixed_lines, line)
@@ -558,6 +569,14 @@ function Validation._process_context_line(line, line_num, original_lines, issues
   end
 
   table.insert(issues, issue)
+
+  -- Handle simple whitespace mismatch - use the corrected line
+  if issue.type == 'whitespace_mismatch' and issue.corrected_line then
+    issue.message = issue.message .. ' (auto-corrected whitespace)'
+    issue.severity = 'info'
+    table.insert(result.fixed_lines, ' ' .. issue.corrected_line)
+    return result
+  end
 
   -- Handle generic joined lines formatting issue
   if issue.type == 'formatting_issue' and issue.split_lines then
@@ -600,8 +619,9 @@ end
 -- @param context_text The text from the context line (without leading space)
 -- @param original_lines Array of lines from the original file
 -- @param line_num Line number for error reporting
+-- @param hint_line_num Optional hint for the expected line number in original file
 -- @return table|nil: Issue object if validation fails
-function Validation._validate_context_against_original(context_text, original_lines, line_num)
+function Validation._validate_context_against_original(context_text, original_lines, line_num, hint_line_num)
   -- Skip empty lines
   if context_text == '' then
     return nil
@@ -617,9 +637,46 @@ function Validation._validate_context_against_original(context_text, original_li
   -- No exact match found, this might be a formatting issue
   -- Common issues: joined lines, missing indentation, etc.
 
-  -- Check if context_text is a prefix of any original line
-  -- This handles common cases where multiple lines are joined together
-  local prefix_match = Validation._find_prefix_match(context_text, original_lines)
+  -- First, check for content matches with different whitespace (simple indentation issues)
+  local context_trimmed = context_text:gsub('^%s*(.-)%s*$', '%1')
+  if context_trimmed ~= '' then
+    local matches = {}
+    for orig_line_num, orig_line in ipairs(original_lines) do
+      local orig_trimmed = orig_line:gsub('^%s*(.-)%s*$', '%1')
+      if orig_trimmed == context_trimmed then
+        table.insert(matches, {line = orig_line, line_num = orig_line_num})
+      end
+    end
+
+    if #matches > 0 then
+      -- If we have multiple matches, prefer the one closest to the hint
+      local best_match = matches[1]
+      if hint_line_num and #matches > 1 then
+        local best_distance = math.abs(matches[1].line_num - hint_line_num)
+        for _, match in ipairs(matches) do
+          local distance = math.abs(match.line_num - hint_line_num)
+          if distance < best_distance then
+            best_distance = distance
+            best_match = match
+          end
+        end
+      end
+
+      -- Found content match with different whitespace - this is a simple whitespace fix
+      return {
+        line = line_num,
+        type = 'whitespace_mismatch',
+        message = 'Context line has incorrect whitespace: ' .. context_text:sub(1, 50) .. (context_text:len() > 50 and '...' or ''),
+        severity = 'info',
+        original_text = context_text,
+        corrected_line = best_match.line,
+      }
+    end
+  end
+
+  -- Only check for joined lines if it's not a simple whitespace issue
+  -- This handles genuine cases where multiple lines are joined together
+  local prefix_match = Validation._find_prefix_match(context_text, original_lines, hint_line_num)
   if prefix_match then
     local message
     message = 'Joined line detected (prefix match): '
@@ -680,14 +737,18 @@ end
 --- Finds if context_text is a prefix of lines in the original file and extracts the split
 -- @param context_text The potentially joined line
 -- @param original_lines Array of lines from the original file
+-- @param hint_line_num Optional hint for preferred line number
 -- @return table|nil: Array of split lines that reconstruct the context_text, or nil if no match
-function Validation._find_prefix_match(context_text, original_lines)
+function Validation._find_prefix_match(context_text, original_lines, hint_line_num)
   if not original_lines or #original_lines == 0 or context_text == '' then
     return nil
   end
 
   -- Remove leading/trailing whitespace for comparison
   local trimmed_context = context_text:gsub('^%s+', ''):gsub('%s+$', '')
+
+  -- Collect all possible matches first
+  local all_matches = {}
 
   -- Try to find a sequence of original lines that when concatenated (with appropriate separators)
   -- would create the context_text
@@ -699,34 +760,59 @@ function Validation._find_prefix_match(context_text, original_lines)
       local orig_line = original_lines[end_idx]
       local trimmed_orig = orig_line:gsub('^%s+', ''):gsub('%s+$', '')
 
-      if trimmed_orig == '' then
-        break -- Skip empty lines for now
-      end
-
+      -- Include all lines (even empty ones) in the match sequence, but only use non-empty ones for joining
       table.insert(matched_lines, orig_line)
 
-      -- Generic join strategy: try direct concatenation of trimmed lines
-      local joined = ''
-      for i, line in ipairs(matched_lines) do
-        local line_trimmed = line:gsub('^%s+', ''):gsub('%s+$', '')
-        if i == 1 then
-          joined = line_trimmed
-        else
-          joined = joined .. line_trimmed
+      -- Only process non-empty lines for matching
+      if trimmed_orig ~= '' then
+        -- Generic join strategy: try direct concatenation of trimmed non-empty lines
+        local joined = ''
+        for _, line in ipairs(matched_lines) do
+          local line_trimmed = line:gsub('^%s+', ''):gsub('%s+$', '')
+          if line_trimmed ~= '' then
+            if joined == '' then
+              joined = line_trimmed
+            else
+              joined = joined .. line_trimmed
+            end
+          end
+        end
+
+        -- Check if this matches our context text
+        if joined == trimmed_context then
+          table.insert(all_matches, {
+            lines = vim.deepcopy(matched_lines),
+            start_line = start_idx,
+            end_line = end_idx
+          })
         end
       end
-
-      -- Check if this matches our context text
-      if joined == trimmed_context then
-        return matched_lines
-      end
-
-      -- Only check for very specific joining patterns to avoid false positives
-      -- (Removed the aggressive prefix matching that was splitting legitimate lines)
+      -- If it's an empty line, we just continue to the next iteration (no need for goto)
     end
   end
 
-  return nil
+  if #all_matches == 0 then
+    return nil
+  end
+
+  -- If we have multiple matches, prefer the one closest to the hint
+  if hint_line_num and #all_matches > 1 then
+    local best_match = all_matches[1]
+    local best_distance = math.abs(all_matches[1].start_line - hint_line_num)
+
+    for _, match in ipairs(all_matches) do
+      local distance = math.abs(match.start_line - hint_line_num)
+      if distance < best_distance then
+        best_distance = distance
+        best_match = match
+      end
+    end
+
+    return best_match.lines
+  end
+
+  -- Return the first match if no hint provided
+  return all_matches[1].lines
 end
 
 --- Validates if a split candidate matches lines in the original file
@@ -790,6 +876,442 @@ function Validation._correct_line_indentation(split_line, original_lines, is_con
   end
 
   return split_line -- Fallback to as-is
+end
+
+--- Fixes context lines in diff that have incorrect whitespace by matching original file
+-- Uses sequential hunk context matching for accurate whitespace correction
+-- @param diff_content The diff content to fix
+-- @return string, table: Fixed diff content and issues found
+function Validation.fix_context_whitespace(diff_content)
+  local lines = vim.split(diff_content, '\n', { plain = true })
+  local issues = {}
+  local fixed_lines = {}
+
+  local i = 1
+  while i <= #lines do
+    local line = lines[i]
+
+    -- Check if this line starts a hunk
+    if line:match '^@@' then
+      local hunk_result = Validation._fix_hunk_whitespace(lines, i, issues)
+      -- Add all fixed hunk lines
+      for _, fixed_line in ipairs(hunk_result.fixed_lines) do
+        table.insert(fixed_lines, fixed_line)
+      end
+      -- Skip to the line after the hunk
+      i = hunk_result.next_line_index
+    else
+      -- Not a hunk, add line as-is
+      table.insert(fixed_lines, line)
+      i = i + 1
+    end
+  end
+
+  return table.concat(fixed_lines, '\n'), issues
+end
+
+--- Fixes whitespace for an entire hunk by matching the complete context sequence
+-- @param lines All diff lines
+-- @param hunk_start_index Index where the hunk starts (@@)
+-- @param issues Issues array to append to
+-- @return table: {fixed_lines, next_line_index}
+function Validation._fix_hunk_whitespace(lines, hunk_start_index, issues)
+  local hunk_header = lines[hunk_start_index]
+  local fixed_lines = { hunk_header }
+
+  -- Parse the file path from preceding lines
+  local current_file = nil
+  for i = hunk_start_index - 1, 1, -1 do
+    if lines[i]:match '^%+%+%+' then
+      current_file = lines[i]:match '^%+%+%+%s+(.+)$'
+      break
+    end
+  end
+
+  -- Read original file
+  local original_lines = nil
+  if current_file then
+    original_lines = Validation._read_original_file(current_file)
+  end
+
+  if not original_lines then
+    -- Can't fix without original file, copy hunk as-is
+    local i = hunk_start_index + 1
+    while i <= #lines and not lines[i]:match '^@@' and not lines[i]:match '^---' and not lines[i]:match '^%+%+%+' do
+      table.insert(fixed_lines, lines[i])
+      i = i + 1
+    end
+    return { fixed_lines = fixed_lines, next_line_index = i }
+  end
+
+  -- Parse hunk header for line number
+  local old_start = hunk_header:match '^@@ %-(%d+)'
+  local hunk_start_line = old_start and tonumber(old_start) or nil
+
+  -- Process the hunk line-by-line, handling context lines with smart reconstruction
+  local i = hunk_start_index + 1
+  local hunk_end_index = i
+
+  -- Find end of hunk
+  while hunk_end_index <= #lines and not lines[hunk_end_index]:match '^@@' and not lines[hunk_end_index]:match '^---' and not lines[hunk_end_index]:match '^%+%+%+' do
+    hunk_end_index = hunk_end_index + 1
+  end
+
+  -- Process each line in the hunk
+  while i < hunk_end_index do
+    local line = lines[i]
+
+    if line:match '^%s' then
+      -- This is a context line - apply intelligent whitespace correction
+      local context_text = line:sub(2) -- Remove leading space
+      local corrected_line = Validation._fix_single_context_line_whitespace(context_text, original_lines, hunk_start_line)
+
+      if corrected_line and corrected_line ~= context_text then
+        local fixed_line = ' ' .. corrected_line
+        table.insert(fixed_lines, fixed_line)
+
+        if fixed_line ~= line then
+          table.insert(issues, {
+            line = i,
+            severity = 'info',
+            type = 'whitespace_fix',
+            message = 'Fixed context line whitespace to match original file',
+          })
+        end
+      else
+        -- No correction needed or possible
+        table.insert(fixed_lines, line)
+      end
+    else
+      -- Not a context line (+ or -), keep as-is
+      table.insert(fixed_lines, line)
+    end
+
+    i = i + 1
+  end
+
+  return { fixed_lines = fixed_lines, next_line_index = hunk_end_index }
+end
+
+--- Finds the best sequential match for a sequence of context lines
+-- @param context_lines Context lines (without leading space)
+-- @param original_lines Lines from original file
+-- @param hint_start_line Hint for where to start searching
+-- @return table|nil: Matched lines from original file, or nil if no match
+function Validation._find_sequential_context_match(context_lines, original_lines, hint_start_line)
+  if #context_lines == 0 then
+    return nil
+  end
+
+  -- Helper function to check if a sequence matches at a given position
+  local function check_sequence_match(start_pos)
+    local matched = {}
+    for i, context_line in ipairs(context_lines) do
+      local original_line = original_lines[start_pos + i - 1]
+      if not original_line then
+        return nil -- Not enough lines in original file
+      end
+
+      -- Compare content (ignore whitespace differences)
+      local context_trimmed = context_line:gsub('^%s*(.-)%s*$', '%1')
+      local original_trimmed = original_line:gsub('^%s*(.-)%s*$', '%1')
+
+      if context_trimmed ~= original_trimmed or context_trimmed == '' then
+        return nil -- Content doesn't match
+      end
+
+      table.insert(matched, original_line)
+    end
+    return matched
+  end
+
+  -- Try searching near the hint first
+  if hint_start_line then
+    local search_start = math.max(1, hint_start_line - 5)
+    local search_end = math.min(#original_lines - #context_lines + 1, hint_start_line + 10)
+
+    for pos = search_start, search_end do
+      local match = check_sequence_match(pos)
+      if match then
+        return match
+      end
+    end
+  end
+
+  -- Fallback: search entire file
+  for pos = 1, #original_lines - #context_lines + 1 do
+    local match = check_sequence_match(pos)
+    if match then
+      return match
+    end
+  end
+
+  return nil -- No match found
+end
+
+--- Enhanced sequential context matching with flexible block structure handling
+-- @param context_lines Context lines (without leading space)
+-- @param original_lines Lines from original file
+-- @param hint_start_line Hint for where to start searching
+-- @return table|nil: Matched lines from original file, or nil if no match
+function Validation._find_enhanced_sequential_context_match(context_lines, original_lines, hint_start_line)
+  if #context_lines == 0 then
+    return nil
+  end
+
+  -- Preprocess context lines to handle structural issues (like joined lines)
+  local preprocessed_context = Validation._preprocess_context_for_matching(context_lines)
+
+  -- Helper function for flexible sequence matching that handles structural differences
+  local function check_flexible_block_match(start_pos)
+    local matched = {}
+    local original_pos = start_pos
+    local context_pos = 1
+    local match_tolerance = 2  -- Allow skipping up to 2 lines
+    local skipped_lines = 0
+
+    while context_pos <= #preprocessed_context and original_pos <= #original_lines do
+      local context_line = preprocessed_context[context_pos]
+      local original_line = original_lines[original_pos]
+
+      -- Compare content (ignore whitespace differences)
+      local context_trimmed = context_line:gsub('^%s*(.-)%s*$', '%1')
+      local original_trimmed = original_line:gsub('^%s*(.-)%s*$', '%1')
+
+      if context_trimmed == original_trimmed and context_trimmed ~= '' then
+        -- Found a match - use the original line's whitespace
+        table.insert(matched, original_line)
+        context_pos = context_pos + 1
+        original_pos = original_pos + 1
+        skipped_lines = 0  -- Reset skip counter on successful match
+      elseif context_trimmed == '' then
+        -- Handle empty context line
+        if original_trimmed == '' then
+          table.insert(matched, original_line)
+          context_pos = context_pos + 1
+          original_pos = original_pos + 1
+        else
+          -- Add a blank line if context expects it but original doesn't have it at this position
+          table.insert(matched, '')
+          context_pos = context_pos + 1
+        end
+      else
+        -- No match - try the next original line if we haven't exceeded tolerance
+        if skipped_lines < match_tolerance then
+          original_pos = original_pos + 1
+          skipped_lines = skipped_lines + 1
+        else
+          return nil  -- Too many mismatches
+        end
+      end
+
+      -- Safety check to prevent infinite loops
+      if original_pos > start_pos + #preprocessed_context + match_tolerance + 3 then
+        return nil
+      end
+    end
+
+    -- Check if we successfully matched all context lines
+    if context_pos > #preprocessed_context then
+      return matched
+    end
+
+    return nil
+  end
+
+  -- Try enhanced matching near the hint first
+  if hint_start_line then
+    local search_start = math.max(1, hint_start_line - 3)
+    local search_end = math.min(#original_lines - #preprocessed_context, hint_start_line + 15)
+
+    for pos = search_start, search_end do
+      local match = check_flexible_block_match(pos)
+      if match and #match > 0 then
+        return match
+      end
+    end
+  end
+
+  -- Fallback: try flexible matching on the entire file
+  for pos = 1, math.max(1, #original_lines - #preprocessed_context - 5) do
+    local match = check_flexible_block_match(pos)
+    if match and #match > 0 then
+      return match
+    end
+  end
+
+  return nil -- No match found
+end
+
+--- Preprocesses context lines to handle joined lines and structural issues
+-- @param context_lines Raw context lines from diff
+-- @return table: Preprocessed and cleaned context lines
+function Validation._preprocess_context_for_matching(context_lines)
+  local preprocessed = {}
+
+  for _, line in ipairs(context_lines) do
+    -- Detect and split joined lines
+    local processed_line = line
+
+    -- Pattern 1: ")except" or ")else" etc. - closing paren immediately followed by keyword
+    local before_paren, after_keyword = processed_line:match('^(%s*%))([a-zA-Z].*)')
+    if before_paren and after_keyword then
+      -- Split into two lines: `)` and the keyword line
+      table.insert(preprocessed, before_paren)
+      -- Determine appropriate indentation for the keyword line
+      local base_indent = before_paren:match('^%s*') or ''
+      -- For 'except', it should be outdented relative to the closing paren
+      local keyword_indent = #base_indent >= 4 and base_indent:sub(1, -5) or ''
+      table.insert(preprocessed, keyword_indent .. after_keyword)
+    else
+      -- No joined line detected, keep as-is
+      table.insert(preprocessed, processed_line)
+    end
+  end
+
+  return preprocessed
+end
+
+--- Fixes a single context line's whitespace to match the original file
+-- @param context_text The context line text (without leading space)
+-- @param original_lines The original file lines
+-- @param hint_start_line Hint for where to start searching
+-- @return string|nil The corrected line text, or nil if no correction needed/possible
+function Validation._fix_single_context_line_whitespace(context_text, original_lines, hint_start_line)
+  if not original_lines or #original_lines == 0 then
+    return nil
+  end
+
+  -- First, check for exact matches (this handles most cases)
+  for _, orig_line in ipairs(original_lines) do
+    if orig_line == context_text then
+      return nil -- Already correct, no change needed
+    end
+  end
+
+  -- Check for matches where only whitespace differs
+  local context_trimmed = context_text:gsub('^%s*(.-)%s*$', '%1')
+  if context_trimmed == '' then
+    -- Handle empty lines - find the closest empty line in original
+    local best_empty_line = nil
+    local best_distance = math.huge
+
+    for line_num, orig_line in ipairs(original_lines) do
+      if orig_line:gsub('^%s*(.-)%s*$', '%1') == '' then
+        local distance = hint_start_line and math.abs(line_num - hint_start_line) or 0
+        if distance < best_distance then
+          best_distance = distance
+          best_empty_line = orig_line
+        end
+      end
+    end
+
+    return best_empty_line or '' -- Use closest empty line or fallback
+  end
+
+  -- Look for lines with matching content but different whitespace, prioritizing those near hint
+  local matches = {}
+  for line_num, orig_line in ipairs(original_lines) do
+    local orig_trimmed = orig_line:gsub('^%s*(.-)%s*$', '%1')
+    if orig_trimmed == context_trimmed then
+      table.insert(matches, {line = orig_line, line_num = line_num})
+    end
+  end
+
+  if #matches > 0 then
+    -- If we have a hint, prefer the match closest to the hint
+    if hint_start_line then
+      table.sort(matches, function(a, b)
+        return math.abs(a.line_num - hint_start_line) < math.abs(b.line_num - hint_start_line)
+      end)
+    end
+    return matches[1].line
+  end
+
+  -- Try fuzzy matching for cases where content might be slightly different
+  -- but represents the same logical line
+  local best_match = nil
+  local best_score = 0
+  local best_distance = math.huge
+
+  for line_num, orig_line in ipairs(original_lines) do
+    local score = Validation._calculate_line_similarity(context_text, orig_line)
+    if score > 0.8 then
+      local distance = hint_start_line and math.abs(line_num - hint_start_line) or 0
+      -- Prefer closer matches when scores are similar
+      if score > best_score or (score == best_score and distance < best_distance) then
+        best_match = orig_line
+        best_score = score
+        best_distance = distance
+      end
+    end
+  end
+
+  if best_match then
+    return best_match
+  end
+
+  -- No correction possible
+  return nil
+end
+
+--- Calculates similarity between two lines (0.0 to 1.0)
+-- @param line1 First line
+-- @param line2 Second line
+-- @return number Similarity score
+function Validation._calculate_line_similarity(line1, line2)
+  -- Simple similarity based on trimmed content
+  local trimmed1 = line1:gsub('^%s*(.-)%s*$', '%1')
+  local trimmed2 = line2:gsub('^%s*(.-)%s*$', '%1')
+
+  if trimmed1 == trimmed2 then
+    return 1.0
+  end
+
+  if trimmed1 == '' or trimmed2 == '' then
+    return 0.0
+  end
+
+  -- Check if one is a substring of the other
+  if trimmed1:find(trimmed2, 1, true) or trimmed2:find(trimmed1, 1, true) then
+    return 0.9
+  end
+
+  -- Simple word-based comparison
+  local words1 = {}
+  for word in trimmed1:gmatch('%S+') do
+    words1[word] = true
+  end
+
+  local words2 = {}
+  local common_words = 0
+  for word in trimmed2:gmatch('%S+') do
+    if words1[word] then
+      common_words = common_words + 1
+    end
+    words2[word] = true
+  end
+
+  local total_words = 0
+  for _ in pairs(words1) do total_words = total_words + 1 end
+  for _ in pairs(words2) do total_words = total_words + 1 end
+
+  if total_words == 0 then
+    return 0.0
+  end
+
+  return (2.0 * common_words) / total_words
+end
+
+--- Helper function to read original file lines
+-- @param file_path Path to the original file
+-- @return table|nil: Lines from the original file, or nil if can't read
+function Validation._read_original_file(file_path)
+  local lines, err = Utils.read_file(file_path)
+  if not lines then
+    return nil
+  end
+  return lines
 end
 
 return Validation

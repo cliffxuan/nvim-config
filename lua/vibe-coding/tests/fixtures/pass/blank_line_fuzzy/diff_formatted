@@ -1,0 +1,10 @@
+--- a/original.py
++++ b/original.py
+@@ -4,6 +4,7 @@
+ from pathlib import Path
+ from typing import Any, Dict, List
++import colorama
+ 
+ import fy_signin
+ import requests
+ import typer

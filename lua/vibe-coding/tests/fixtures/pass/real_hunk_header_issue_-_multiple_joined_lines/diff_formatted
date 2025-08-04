@@ -1,0 +1,29 @@
+--- a/original.py
++++ b/original.py
+@@ -5,5 +5,5 @@
+
+-    all_mixtures = []
++    all_mixture_names = []
+     platforms: list[PLATFORM] = ["daier", "dusk"]
+
+     for platform in platforms:
+@@ -10,14 +10,14 @@
+             mixtures = get_mixtures(platform)
+-            all_mixtures.extend(mixtures)
++            all_mixture_names.extend(mixtures.keys())
+             console.print(
+                 f"[blue]Found {len(mixtures)} {platform.title()} mixtures[/blue]"
+             )
+         except Exception as e:
+             console.print(f"[red]Error fetching {platform.title()} mixtures: {e}[/red]")
+
+-    if not all_mixtures:
++    if not all_mixture_names:
+         console.print("[red]No mixtures found, cannot generate type alias[/red]")
+         return
+
+     # Sort mixtures for consistent output
+-    all_mixtures.sort()
+\ No newline at end of file
++    all_mixture_names.sort()
+\ No newline at end of file

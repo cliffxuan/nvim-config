@@ -1,0 +1,53 @@
+def post_shirt(api_base_url: str, shirt_data: dict[str, Any]) -> bool:
+    """Post a shirt to the API."""
+    try:
+        client_name = get_client_name(api_base_url)
+        response = requests.post(
+            f"{api_base_url}/api/v2/shirts/",
+            json=shirt_data,
+            auth=fy_signin.RequestsAuth(f"{client_name}.client", client_name),
+        )
+        if response.status_code == 200:
+            console.print(
+                f"[green]✓[/green] Successfully added shirt"
+                f" [bold]{shirt_data['name']}[/bold] on"
+                f" [cyan]{shirt_data['mixture']}[/cyan]"
+            )
+            return True
+        else:
+            console.print(
+                "[red]✗[/red] Failed to add shirt"
+                f" [bold]{shirt_data['name']}[/bold]"
+                f": [red]{response.status_code}[/red] - {response.text}"
+            )
+            return False
+    except Exception as e:
+        console.print(
+            f"[red]Error posting shirt [bold]{shirt_data['name']}[/bold]: {e}[/red]"
+        )
+        return False
+
+
+def generate_mixture_type_alias():
+    """Generate type aliases (SITE, PLATFORM, MIXTURE) and write to primitives.py."""
+    console.print("[bold blue]Generating type aliases...[/bold blue]")
+
+    all_mixture_names = []
+    platforms: list[PLATFORM] = ["daier", "dusk"]
+
+    for platform in platforms:
+        try:
+            mixtures = get_mixtures(platform)
+            all_mixture_names.extend(mixtures.keys())
+            console.print(
+                f"[blue]Found {len(mixtures)} {platform.title()} mixtures[/blue]"
+            )
+        except Exception as e:
+            console.print(f"[red]Error fetching {platform.title()} mixtures: {e}[/red]")
+
+    if not all_mixture_names:
+        console.print("[red]No mixtures found, cannot generate type alias[/red]")
+        return
+
+    # Sort mixtures for consistent output
+    all_mixture_names.sort()
