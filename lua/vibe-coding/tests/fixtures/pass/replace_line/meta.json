@@ -1,0 +1,10 @@
+{
+  "tags": [
+    "complex",
+    "deletion"
+  ],
+  "file_path": "n_queens.py",
+  "name": "File Deletion",
+  "description": "Test old line is replaced with the same new line",
+  "should_succeed": true
+}

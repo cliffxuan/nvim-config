@@ -859,6 +859,434 @@ def main():
         )
 
 
+class TestUnifiedHunkClasses:
+    """Test the new unified hunk classes."""
+
+    def test_hunk_from_header_creation(self):
+        """Test creating Hunk from header line."""
+        from fix_diff import Hunk
+
+        header = "@@ -1,5 +1,6 @@"
+        hunk = Hunk.from_header(header)
+
+        assert hunk is not None
+        assert hunk.header_line == header
+        assert hunk.start_line == 1
+        assert hunk.old_count == 5
+        assert hunk.new_count == 6
+        assert hunk.new_start == 1
+        assert hunk.line_range == (1, 5)
+
+    def test_hunk_from_lines_creation(self):
+        """Test creating Hunk from list of lines."""
+        from fix_diff import Hunk
+
+        lines = ["@@ -10,3 +10,4 @@", " context line", "-deleted line", "+added line"]
+
+        hunk = Hunk.from_lines(lines)
+
+        assert hunk is not None
+        assert hunk.header_line == "@@ -10,3 +10,4 @@"
+        assert hunk.start_line == 10
+        assert hunk.old_count == 3
+        assert hunk.new_count == 4
+        assert len(hunk.content_lines) == 3
+
+    def test_hunk_range_extraction(self):
+        """Test unified range extraction method."""
+        from fix_diff import Hunk
+
+        lines = ["@@ -5,10 +5,12 @@", " some content"]
+        range_result = Hunk.extract_range_from_lines(lines)
+
+        assert range_result == (5, 14)  # start=5, end=5+10-1=14
+
+    def test_hunk_overlap_detection(self):
+        """Test overlap detection between hunks."""
+        from fix_diff import Hunk
+
+        hunk1 = Hunk.from_header("@@ -1,5 +1,5 @@")
+        hunk2 = Hunk.from_header("@@ -4,5 +4,5 @@")  # Overlaps with hunk1
+        hunk3 = Hunk.from_header("@@ -10,5 +10,5 @@")  # No overlap
+
+        assert hunk1.overlaps_with(hunk2)  # (1,5) overlaps with (4,8)
+        assert not hunk1.overlaps_with(hunk3)  # (1,5) doesn't overlap with (10,14)
+        assert not hunk2.overlaps_with(hunk3)  # (4,8) doesn't overlap with (10,14)
+
+    def test_hunk_manager_overlap_detection(self):
+        """Test HunkManager unified overlap detection."""
+        from fix_diff import HunkManager
+
+        # Test with list of hunk lines
+        hunks = [
+            ["@@ -1,5 +1,5 @@", " line1", " line2"],
+            ["@@ -4,3 +4,3 @@", " line4", " line5"],  # Overlaps
+            ["@@ -10,2 +10,2 @@", " line10"],  # No overlap
+        ]
+
+        assert HunkManager.detect_overlaps(hunks)  # Should detect overlap
+
+        # Test with non-overlapping hunks
+        non_overlapping = [
+            ["@@ -1,3 +1,3 @@", " line1"],
+            ["@@ -10,3 +10,3 @@", " line10"],
+        ]
+
+        assert not HunkManager.detect_overlaps(non_overlapping)
+
+    def test_hunk_manager_merge_functionality(self):
+        """Test HunkManager merging functionality."""
+        from fix_diff import HunkManager
+
+        overlapping_hunks = [
+            ["@@ -1,3 +1,3 @@", " context", "-old1", "+new1"],
+            ["@@ -2,3 +2,4 @@", " context", "-old2", "+new2", "+extra"],
+        ]
+
+        original_content = "context\nold1\nold2\nextra_context"
+
+        merged = HunkManager.merge_overlapping_hunks(
+            overlapping_hunks, original_content
+        )
+
+        # Should have fewer hunks after merging
+        assert len(merged) < len(overlapping_hunks)
+        assert len(merged) == 1  # Should merge into single hunk
+
+        # Merged hunk should have proper header
+        merged_hunk = merged[0]
+        assert merged_hunk[0].startswith("@@")
+        assert "context" in "\n".join(merged_hunk)
+
+    def test_malformed_hunk_handling(self):
+        """Test handling of malformed hunks."""
+        from fix_diff import Hunk
+
+        # Test invalid header
+        invalid_hunk = Hunk.from_header("not a valid header")
+        assert invalid_hunk is None
+
+        # Test empty lines
+        empty_hunk = Hunk.from_lines([])
+        assert empty_hunk is None
+
+        # Test lines without header
+        no_header = Hunk.from_lines([" just content", "+addition"])
+        assert no_header is None
+
+    def test_backwards_compatibility(self):
+        """Test that old DiffFixer methods still work through delegation."""
+        from fix_diff import DiffFixer
+
+        fixer = DiffFixer()
+
+        # Test that old methods now delegate to new unified classes
+        hunks = [["@@ -1,3 +1,3 @@", " line1"], ["@@ -5,3 +5,3 @@", " line5"]]
+
+        # These should work through delegation
+        has_overlaps = fixer._has_overlapping_hunks(hunks)
+        assert has_overlaps is False  # No overlap
+
+        range_result = fixer._get_hunk_line_range(hunks[0])
+        assert range_result == (1, 3)
+
+
+class TestCommonLogicExtraction:
+    """Test the extracted common logic shared between single and multi-hunk processing."""
+
+    def setup_method(self):
+        self.fixer = DiffFixer()
+
+    def test_process_hunk_content_common_joined_lines(self):
+        """Test that common hunk processing handles joined lines correctly."""
+        from fix_diff import DiffContext
+
+        # Test joined line that should be split
+        hunk_lines = ["@@ -1,2 +1,2 @@", "         )except Exception as e:"]
+
+        # Original file has the separate lines
+        original_lines = ["        )", "    except Exception as e:"]
+
+        context = DiffContext(
+            lines=hunk_lines,
+            original_lines=original_lines,
+            line_index=0,
+            preserve_filenames=False,
+        )
+
+        result = self.fixer._process_hunk_content_common(hunk_lines, context)
+
+        # Should split into separate lines with correct indentation
+        assert "        )" in str(result)  # First part with 8 spaces
+        assert "    except Exception as e:" in str(result)  # Second part with 4 spaces
+        # Should NOT contain the joined line
+        assert ")except Exception as e:" not in str(result)
+
+    def test_process_hunk_content_common_missing_prefixes(self):
+        """Test that common hunk processing adds missing diff prefixes."""
+        from fix_diff import DiffContext
+
+        hunk_lines = ["@@ -1,2 +1,2 @@", "existing line", "new line"]
+
+        # Only 'existing line' exists in original, so 'new line' should get + prefix
+        original_lines = ["existing line"]
+
+        context = DiffContext(
+            lines=hunk_lines,
+            original_lines=original_lines,
+            line_index=0,
+            preserve_filenames=False,
+        )
+
+        result = self.fixer._process_hunk_content_common(hunk_lines, context)
+        result_str = "\n".join(result)
+
+        # Should infer that 'existing line' is context (exists in original)
+        # and 'new line' is addition (doesn't exist in original)
+        assert " existing line" in result_str or "+existing line" in result_str
+        assert "+new line" in result_str
+
+    def test_process_hunk_content_common_malformed_headers(self):
+        """Test that common hunk processing fixes malformed hunk headers."""
+        from fix_diff import DiffContext
+
+        hunk_lines = ["@@ ... @@", " context line", "-old line", "+new line"]
+        original_lines = ["context line", "old line"]
+
+        context = DiffContext(
+            lines=hunk_lines,
+            original_lines=original_lines,
+            line_index=0,
+            preserve_filenames=False,
+        )
+
+        result = self.fixer._process_hunk_content_common(hunk_lines, context)
+        result_str = "\n".join(result)
+
+        # Should fix the malformed header
+        assert "@@ ... @@" not in result_str
+        assert "@@" in result_str and result_str.count("@@") >= 2  # Proper hunk header
+
+    def test_apply_common_post_processing_single_hunk(self):
+        """Test common post-processing for single-hunk diffs."""
+        # Test single-hunk post-processing
+        lines = [
+            "--- a/test.txt",
+            "+++ b/test.txt",
+            "@@ ... @@",
+            "-old line",
+            "+new line",
+        ]
+        original_content = "old line\n"
+
+        result = self.fixer._apply_common_post_processing(
+            lines, original_content, is_single_hunk=True
+        )
+
+        # Should have processed the lines (exact details depend on context, but should not error)
+        assert isinstance(result, list)
+        assert len(result) >= len(lines)  # May add context lines
+
+    def test_apply_common_post_processing_multi_hunk(self):
+        """Test common post-processing for multi-hunk diffs."""
+        # Test multi-hunk post-processing
+        lines = [
+            "--- a/test.txt",
+            "+++ b/test.txt",
+            "@@ -1,1 +1,1 @@",
+            "-old line 1",
+            "+new line 1",
+            "@@ -3,1 +3,1 @@",
+            "-old line 3",
+            "+new line 3",
+        ]
+        original_content = "old line 1\ncontext\nold line 3\n"
+
+        result = self.fixer._apply_common_post_processing(
+            lines, original_content, is_single_hunk=False
+        )
+
+        # Should process without adding single-hunk specific context
+        assert isinstance(result, list)
+        assert len(result) >= len(lines)
+
+    def test_apply_common_post_processing_no_newline_handling(self):
+        """Test common post-processing handles files without trailing newlines."""
+        lines = [
+            "--- a/test.txt",
+            "+++ b/test.txt",
+            "@@ -1,2 +1,2 @@",
+            " line 1",
+            "-last_line",
+            "+last_line_modified",
+        ]
+
+        # Original file without trailing newline
+        original_content = "line 1\nlast_line"  # No \n at end
+
+        result = self.fixer._apply_common_post_processing(
+            lines, original_content, is_single_hunk=True
+        )
+        result_str = "\n".join(result)
+
+        # Should add no-newline markers when touching the last line
+        assert "\\ No newline at end of file" in result_str
+
+    def test_process_file_headers_common(self):
+        """Test common file header processing."""
+        lines = [
+            "--- original/path.txt",
+            "+++ original/path.txt",
+            "@@ -1,1 +1,1 @@",
+            "-old",
+            "+new",
+        ]
+
+        file_headers, remaining_lines = self.fixer._process_file_headers_common(
+            lines, "test.txt", preserve_filenames=False
+        )
+
+        # Should extract and fix file headers
+        assert len(file_headers) == 2
+        assert "--- a/test.txt" in file_headers
+        assert "+++ b/test.txt" in file_headers
+
+        # Should return non-header lines
+        assert len(remaining_lines) == 3
+        assert "@@ -1,1 +1,1 @@" in remaining_lines
+        assert "-old" in remaining_lines
+        assert "+new" in remaining_lines
+
+    def test_process_file_headers_common_preserve_filenames(self):
+        """Test common file header processing with filename preservation."""
+        lines = [
+            "--- original/path.txt",
+            "+++ original/path.txt",
+            "@@ -1,1 +1,1 @@",
+            "-old",
+            "+new",
+        ]
+
+        file_headers, remaining_lines = self.fixer._process_file_headers_common(
+            lines, "test.txt", preserve_filenames=True
+        )
+
+        # Should preserve original filenames
+        assert len(file_headers) == 2
+        assert "--- original/path.txt" in file_headers
+        assert "+++ original/path.txt" in file_headers
+
+    def test_common_logic_integration_single_hunk(self):
+        """Test that single-hunk processing properly uses common logic."""
+        # Create a simple single-hunk diff that exercises common logic
+        diff_content = """--- a/test.py
++++ b/test.py
+@@ -1,2 +1,2 @@
+ context line
+old lineexcept Exception as e:"""
+
+        # Original with separate lines
+        original_content = """context line
+old line
+except Exception as e:"""
+
+        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+
+        # Should process using common logic and maintain single-hunk specific features
+        assert "context line" in result
+        # Should split the joined line using common logic
+        assert "old line" in result
+        assert "except Exception as e:" in result
+        assert "old lineexcept" not in result
+
+    def test_common_logic_integration_multi_hunk(self):
+        """Test that multi-hunk processing properly uses common logic."""
+        # Create a multi-hunk diff that exercises common logic
+        diff_content = """--- a/test.py
++++ b/test.py
+@@ -1,2 +1,2 @@
+-old line 1
++new line 1
+ context line
+@@ -3,2 +3,2 @@
+ context line 2
+old line 3except Exception as e:"""
+
+        # Original with separate lines
+        original_content = """old line 1
+context line
+old line 3
+except Exception as e:
+context line 2"""
+
+        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+
+        # Should process using common logic and maintain multi-hunk specific features
+        assert result.count("@@") == 4  # 2 hunks * 2 @@ markers each
+        # Should split joined lines using common logic
+        assert "old line 3" in result
+        assert "except Exception as e:" in result
+        assert "old line 3except" not in result
+
+    def test_single_hunk_uses_common_logic_fallback(self):
+        """Test that single-hunk processing now falls back to common logic for appropriate cases."""
+        # Create a single-hunk diff with joined lines and missing prefixes
+        diff_content = """--- a/test.py
++++ b/test.py
+@@ -1,3 +1,3 @@
+ context line
+old lineexcept Exception as e:
+new unprefixed line"""
+
+        # Original with separate lines
+        original_content = """context line
+old line
+except Exception as e:"""
+
+        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+
+        # Should use common logic to split joined line
+        assert "old line" in result
+        assert "except Exception as e:" in result
+        assert "old lineexcept" not in result
+
+        # Should use common logic to add prefix to unprefixed line
+        assert "+new unprefixed line" in result
+
+    def test_should_use_common_processing_logic(self):
+        """Test the _should_use_common_processing decision logic."""
+        from fix_diff import DiffContext
+
+        # Create context with some original lines for joined line detection
+        context = DiffContext(
+            lines=["test line"],
+            original_lines=["line1", "line2"],
+            line_index=0,
+            preserve_filenames=False,
+        )
+
+        # Should NOT use common processing for headers
+        assert not self.fixer._should_use_common_processing("--- a/file.txt", context)
+        assert not self.fixer._should_use_common_processing("+++ b/file.txt", context)
+        assert not self.fixer._should_use_common_processing("@@ -1,1 +1,1 @@", context)
+
+        # Should NOT use common processing for no-newline markers
+        assert not self.fixer._should_use_common_processing(
+            "\\\\ No newline at end of file", context
+        )
+
+        # Should use common processing for unprefixed lines
+        assert self.fixer._should_use_common_processing("unprefixed line", context)
+
+        # Should NOT use common processing for already prefixed lines
+        assert not self.fixer._should_use_common_processing(" context line", context)
+        assert not self.fixer._should_use_common_processing("+addition line", context)
+        assert not self.fixer._should_use_common_processing("-deletion line", context)
+
+        # Should NOT use common processing for empty lines
+        assert not self.fixer._should_use_common_processing("", context)
+
+
 class TestDiffFixRuleSystem:
     """Test the rule system specifically."""
 
@@ -1491,6 +1919,157 @@ def update_function(param: Type):
         print("✓ Empty lines correctly preserved when merging overlapping hunks")
 
 
+class TestContextLineAddition:
+    """Test the context line addition functionality."""
+
+    def setup_method(self):
+        self.fixer = DiffFixer()
+
+    def test_context_line_addition_basic(self):
+        """Test basic context line addition around hunks with only additions/deletions."""
+        # Create a simple diff with only deletions and additions (no context)
+        diff_content = """--- a/test.py
++++ b/test.py
+@@ ... @@
+-def old_function():
+-    pass
++def new_function():
++    pass"""
+
+        original_content = """# Header comment
+
+def old_function():
+    pass
+
+# Footer comment"""
+
+        fixed_diff = self.fixer.fix_diff(diff_content, original_content, "test.py")
+        lines = fixed_diff.strip().split("\n")
+
+        # Should have proper header with context lines included
+        # The header should be @@ -2,4 +2,4 @@ because we have:
+        # - 1 context line before + 2 deletion lines + 1 context line after = 4 old lines
+        # - 1 context line before + 2 addition lines + 1 context line after = 4 new lines
+        assert any(line.startswith("@@ -2,4 +2,4 @@") for line in lines), (
+            f"Expected proper header, got: {lines}"
+        )
+
+        # Should have empty context line before deletions
+        assert any(line == " " for line in lines), (
+            f"Expected context line, got: {lines}"
+        )
+
+    def test_context_line_parametrizable(self):
+        """Test that context line count is parametrizable."""
+        # Test with 2 context lines
+        fixer_2_lines = DiffFixer(context_lines=2)
+
+        diff_content = """--- a/test.py
++++ b/test.py
+@@ ... @@
+-def old_function():
+-    pass
++def new_function():
++    pass"""
+
+        original_content = """# Header comment 1
+# Header comment 2
+
+def old_function():
+    pass
+
+# Footer comment 1
+# Footer comment 2"""
+
+        fixed_diff = fixer_2_lines.fix_diff(diff_content, original_content, "test.py")
+        lines = fixed_diff.strip().split("\n")
+
+        # Should have 4 context lines total (2 before, 2 after) plus the changes
+        context_lines = [line for line in lines if line.startswith(" ")]
+        assert len(context_lines) >= 2, (
+            f"Expected at least 2 context lines, got: {len(context_lines)}"
+        )
+
+    def test_context_line_multiple_hunks_2_fixture(self):
+        """Test that multiple_hunks_2 fixture works correctly with context lines."""
+        fixtures_path = Path(__file__).parent.parent / "tests" / "fixtures" / "pass"
+        diff_path = fixtures_path / "multiple_hunks_2" / "diff"
+        original_path = fixtures_path / "multiple_hunks_2" / "original.py"
+        expected_path = fixtures_path / "multiple_hunks_2" / "diff_formatted"
+
+        if not all(p.exists() for p in [diff_path, original_path, expected_path]):
+            return skip_test("multiple_hunks_2 fixture files not found")
+
+        diff_content = diff_path.read_text()
+        original_content = original_path.read_text()
+        expected_content = expected_path.read_text()
+
+        fixed_diff = self.fixer.fix_diff(
+            diff_content, original_content, str(original_path)
+        )
+
+        # Should match the expected output
+        expected_lines = expected_content.strip().split("\n")
+        actual_lines = fixed_diff.strip().split("\n")
+
+        # Check that both hunks have proper headers
+        assert "@@ -79,92 +79,45 @@" in fixed_diff, f"First hunk header incorrect"
+        assert "@@ -189,6 +142,3 @@" in fixed_diff, f"Second hunk header incorrect"
+
+        # Verify it can be applied by git
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmpdir_path = Path(tmpdir)
+                orig_file = tmpdir_path / "original.py"
+                diff_file = tmpdir_path / "test.diff"
+
+                orig_file.write_text(original_content)
+                diff_file.write_text(fixed_diff)
+
+                result = subprocess.run(
+                    ["git", "apply", "--check", str(diff_file)],
+                    cwd=tmpdir,
+                    capture_output=True,
+                    text=True,
+                )
+                assert result.returncode == 0, f"Git apply failed: {result.stderr}"
+        except FileNotFoundError:
+            skip_test("git not available for validation")
+
+    def test_skip_context_when_already_present(self):
+        """Test that context lines are not added when already present."""
+        diff_content = """--- a/test.py
++++ b/test.py
+@@ -2,3 +2,3 @@
+ 
+-def old_function():
+-    pass
++def new_function():
++    pass
+ """
+
+        original_content = """# Header
+
+def old_function():
+    pass
+
+# Footer"""
+
+        fixed_diff = self.fixer.fix_diff(diff_content, original_content, "test.py")
+
+        # Should preserve the existing context lines and header
+        assert "@@ -2,3 +2,3 @@" in fixed_diff, (
+            f"Expected header preserved, got: {fixed_diff}"
+        )
+        # Should not add additional context beyond what's already there
+        context_lines = [
+            line for line in fixed_diff.split("\n") if line.startswith(" ")
+        ]
+        assert len(context_lines) <= 2, (
+            f"Should not add extra context, got: {context_lines}"
+        )
+
+
 def run_all_tests():
     """Run all tests manually."""
     # Test DiffFixer
@@ -1527,6 +2106,41 @@ def run_all_tests():
         test_fixer.test_no_newline_marker_only_when_last_line_touched,
     ]
 
+    # Test unified hunk classes
+    test_unified_hunks = TestUnifiedHunkClasses()
+    tests.extend(
+        [
+            test_unified_hunks.test_hunk_from_header_creation,
+            test_unified_hunks.test_hunk_from_lines_creation,
+            test_unified_hunks.test_hunk_range_extraction,
+            test_unified_hunks.test_hunk_overlap_detection,
+            test_unified_hunks.test_hunk_manager_overlap_detection,
+            test_unified_hunks.test_hunk_manager_merge_functionality,
+            test_unified_hunks.test_malformed_hunk_handling,
+            test_unified_hunks.test_backwards_compatibility,
+        ]
+    )
+
+    # Test common logic extraction
+    test_common = TestCommonLogicExtraction()
+    test_common.setup_method()
+    tests.extend(
+        [
+            test_common.test_process_hunk_content_common_joined_lines,
+            test_common.test_process_hunk_content_common_missing_prefixes,
+            test_common.test_process_hunk_content_common_malformed_headers,
+            test_common.test_apply_common_post_processing_single_hunk,
+            test_common.test_apply_common_post_processing_multi_hunk,
+            test_common.test_apply_common_post_processing_no_newline_handling,
+            test_common.test_process_file_headers_common,
+            test_common.test_process_file_headers_common_preserve_filenames,
+            test_common.test_common_logic_integration_single_hunk,
+            test_common.test_common_logic_integration_multi_hunk,
+            test_common.test_single_hunk_uses_common_logic_fallback,
+            test_common.test_should_use_common_processing_logic,
+        ]
+    )
+
     # Test DiffFixRuleSystem
     test_rules = TestDiffFixRuleSystem()
     tests.extend(
@@ -1543,6 +2157,21 @@ def run_all_tests():
             test_rules.test_api_parameter_refactor_empty_line_preservation,
         ]
     )
+
+    # Add context line addition tests
+    test_context = TestContextLineAddition()
+    test_context.setup_method()
+    tests.extend(
+        [
+            test_context.test_context_line_addition_basic,
+            test_context.test_context_line_parametrizable,
+            test_context.test_context_line_multiple_hunks_2_fixture,
+            test_context.test_skip_context_when_already_present,
+        ]
+    )
+
+    # Add standalone tests
+    tests.extend([])
 
     passed = 0
     failed = 0

@@ -249,13 +249,6 @@ function VibePatcher.extract_code_blocks(content)
   return code_blocks
 end
 
---- Validates and fixes common issues in diff content using the validation pipeline.
--- @param diff_content The raw diff content to validate.
--- @return string, table: The cleaned diff content and a table of issues found.
-function VibePatcher.validate_and_fix_diff(diff_content)
-  return Validation.process_diff(diff_content)
-end
-
 --- Extracts the original file path from diff content headers.
 -- @param diff_content The raw diff content.
 -- @return string|nil: The original file path, or nil if not found.
@@ -295,6 +288,7 @@ end
 -- @return string, table: The fixed diff content and any issues found.
 function VibePatcher.fix_diff_with_external_tool(diff_content, original_file_path)
   local issues = {}
+  local plenary_job = require 'plenary.job'
 
   -- If no original file path provided, try to extract it from diff headers
   if not original_file_path then
@@ -324,8 +318,13 @@ function VibePatcher.fix_diff_with_external_tool(diff_content, original_file_pat
       message = 'Original file not found: ' .. (original_file_path or 'nil'),
       severity = 'warning',
     })
-    -- Fallback to the existing validation pipeline
-    return Validation.process_diff(diff_content)
+    -- Fallback to the existing validation pipeline, preserving external tool issues
+    local fallback_result, fallback_issues = Validation.process_diff(diff_content)
+    -- Concatenate external tool issues with fallback issues
+    for _, fallback_issue in ipairs(fallback_issues) do
+      table.insert(issues, fallback_issue)
+    end
+    return fallback_result, issues
   end
 
   -- Create temporary file for the diff content
@@ -344,31 +343,52 @@ function VibePatcher.fix_diff_with_external_tool(diff_content, original_file_pat
     return diff_content, issues
   end
 
-  -- Execute fix_diff.py
-  local cmd = string.format(
-    'python "%s" "%s" "%s"',
-    vim.fn.shellescape(fix_diff_script),
-    vim.fn.shellescape(temp_diff_file),
-    vim.fn.shellescape(original_file_path)
-  )
+  -- Execute fix_diff.py using plenary.job
+  local job = plenary_job:new {
+    command = 'python',
+    args = { fix_diff_script, temp_diff_file, original_file_path },
+    on_stderr = function(_, data)
+      -- Collect stderr data for error reporting
+      if data and data ~= '' then
+        table.insert(issues, {
+          line = 1,
+          type = 'stderr_output',
+          message = 'fix_diff.py stderr: ' .. data,
+          severity = 'warning',
+        })
+      end
+    end,
+  }
 
-  local result = vim.fn.system(cmd)
-  local exit_code = vim.v.shell_error
+  -- Execute the job synchronously
+  job:sync(10000) -- 10 second timeout
 
   -- Clean up temporary file
   vim.fn.delete(temp_diff_file)
 
+  -- Get the result
+  local exit_code = job.code
+  local stdout = job:result()
+  local stderr = job:stderr_result()
+
   -- Check if the command executed successfully
   if exit_code ~= 0 then
+    local error_msg = 'fix_diff.py failed with exit code ' .. exit_code
+    if stderr and #stderr > 0 then
+      error_msg = error_msg .. ': ' .. table.concat(stderr, '\n')
+    end
     table.insert(issues, {
       line = 1,
       type = 'fix_script_error',
-      message = 'fix_diff.py failed with exit code ' .. exit_code .. ': ' .. result,
+      message = error_msg,
       severity = 'error',
     })
     -- Fallback to the existing validation pipeline
     return Validation.process_diff(diff_content)
   end
+
+  -- Join stdout lines to get the result
+  local result = table.concat(stdout, '\n')
 
   -- If result is empty or just whitespace, fallback to original validation
   if not result or result:match '^%s*$' then
@@ -378,7 +398,12 @@ function VibePatcher.fix_diff_with_external_tool(diff_content, original_file_pat
       message = 'fix_diff.py returned empty result, using validation fallback',
       severity = 'info',
     })
-    return Validation.process_diff(diff_content)
+    local fallback_result, fallback_issues = Validation.process_diff(diff_content)
+    -- Concatenate external tool issues with fallback issues
+    for _, fallback_issue in ipairs(fallback_issues) do
+      table.insert(issues, fallback_issue)
+    end
+    return fallback_result, issues
   end
 
   -- Success! Add info issue to track that external tool was used
@@ -398,13 +423,6 @@ end
 function VibePatcher.format_diff(diff_content)
   local formatted, _ = Validation.format_diff(diff_content)
   return formatted
-end
-
---- Intelligently resolves file paths in diff headers by searching the filesystem.
--- @param diff_content The diff content to fix.
--- @return string, table: The fixed diff content and a table of fixes applied.
-function VibePatcher.fix_file_paths(diff_content)
-  return Validation.fix_file_paths(diff_content)
 end
 
 --- Tests if a diff can be applied using external tools.
@@ -932,8 +950,6 @@ function VibePatcher.process_and_apply_patch(diff_content, options)
 
   -- Step 1: Fix diff content using external tool (with fallback to validation pipeline)
   local validated_diff, validation_issues = VibePatcher.fix_diff_with_external_tool(diff_content)
-  print('diff_content' .. diff_content)
-  print('validated_diff' .. validated_diff)
   result.validated_diff = validated_diff
   result.validation_issues = validation_issues
 

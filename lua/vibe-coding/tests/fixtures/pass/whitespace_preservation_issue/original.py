@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Script to convert sample shirt data and load it into the flow-actions API.
-This handles both Isilon and VAST data formats.
+This handles both Daier and DASK data formats.
 """
 
 from pathlib import Path
@@ -86,7 +86,7 @@ type MIXTURE = Literal[
         console.print(f"[red]Error writing to primitives.py: {e}[/red]")
 
 
-app = typer.Typer(help="Storage Actions Data Processing Tool")
+app = typer.Typer(help="Flow Actions Data Processing Tool")
 
 
 @app.command()

@@ -1,0 +1,146 @@
+--- a/original.py
++++ b/original.py
+@@ -79,92 +79,45 @@
+ 
+-def create_dusk_shirt():
+-    """Create a DASK shirt using the provided configuration"""
+-    config = get_dusk_config()
+-
+-    # Generate unique job name using timestamp and UUID
+-    job_name = (
+-        f"create-shirt-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:2]}"
+-    )
+-
+-    # Set repo path following the same pattern as existing code
+-    repo_path = f"/tmp/{job_name}/dusk-views"
+-
+-    try:
+-        logger.info(f"Creating DASK shirt with job name: {job_name}")
+-        logger.info(f"Shirt name: {config['shirt_name']}")
+-        logger.info(f"Oyster: {config['oyster']}")
+-        logger.info(f"Using repo path: {repo_path}")
+-
+-        # Initialize ActionDaskShirtNew
+-        action = ActionDaskShirtNew(repo_path, config, job_name)
+-
+-        logger.info("Shirt object created successfully")
+-        logger.info(f"Git path: {action.shirt.git_path}")
+-        logger.info(f"Shirt path: {action.shirt.shirt_path}")
+-
+-        # Display the generated shirt configuration
+-        logger.info("Generated shirt configuration:")
+-        shirt_dict = action.shirt.todict()
+-
+-        # Pretty print the configuration
+-        logger.info(
+-            "\n" + yaml.dump(shirt_dict, default_flow_style=False, sort_keys=False)
+-        )
+-
+-        # Provision the shirt (this will create YAML, handle groups, and create PR)
+-        logger.info("\nProvisioning shirt...")
+-        action.provision()
+-
+-        logger.info("DASK shirt provisioning completed successfully!")
+-
+-    except Exception as e:
+-        logger.error(f"Error creating DASK shirt: {e}")
+-        traceback.print_exc()
+-        sys.exit(1)
+-
+-
+-def create_daier_shirt():
+-    """Create an Daier shirt using the provided configuration"""
+-    config = get_daier_config()
+-
+-    # Generate unique job name using timestamp and UUID
+-    job_name = (
+-        f"create-shirt-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:2]}"
+-    )
+-
+-    # Set repo path following the same pattern as existing code
+-    repo_path = f"/tmp/{job_name}/daier-shirts"
+-
+-    try:
+-        logger.info(f"Creating Daier shirt with job name: {job_name}")
+-        logger.info(f"Shirt name: {config['shirt_name']}")
+-        logger.info(f"Oyster: {config['oyster']}")
+-        logger.info(f"Using repo path: {repo_path}")
+-
+-        # Initialize ActionDaierShirtNew
+-        action = ActionDaierShirtNew(repo_path, config, job_name)
+-
+-        logger.info("Shirt object created successfully")
+-        logger.info(f"Git path: {action.shirt.git_path}")
+-        logger.info(f"Shirt path: {action.shirt.shirt_path}")
+-
+-        # Display the generated shirt configuration
+-        logger.info("Generated shirt configuration:")
+-        shirt_dict = action.shirt.todict()
+-
+-        # Pretty print the configuration
+-        logger.info(
+-            "\n" + yaml.dump(shirt_dict, default_flow_style=False, sort_keys=False)
+-        )
+-
+-        # Provision the shirt (this will create YAML, handle groups, and create PR)
+-        logger.info("\nProvisioning shirt...")
+-        action.provision()
+-
+-        logger.info("Daier shirt provisioning completed successfully!")
+-
+-    except Exception as e:
+-        logger.error(f"Error creating Daier shirt: {e}")
+-        traceback.print_exc()
+-        sys.exit(1)
++def create_shirt(shirt_type):
++    if shirt_type == "dusk":
++        config = get_dusk_config()
++        ActionClass = ActionDaskShirtNew
++        subdir = "dusk-views"
++    else:
++        config = get_daier_config()
++        ActionClass = ActionDaierShirtNew
++        subdir = "daier-shirts"
++
++    job_name = (
++        f"create-shirt-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:2]}"
++    )
++    repo_path = f"/tmp/{job_name}/{subdir}"
++
++    try:
++        logger.info(f"Creating {shirt_type.upper()} shirt with job name: {job_name}")
++        logger.info(f"Shirt name: {config['shirt_name']}")
++        logger.info(f"Oyster: {config['oyster']}")
++        logger.info(f"Using repo path: {repo_path}")
++
++        action = ActionClass(repo_path, config, job_name)
++
++        logger.info("Shirt object created successfully")
++        logger.info(f"Git path: {action.shirt.git_path}")
++        logger.info(f"Shirt path: {action.shirt.shirt_path}")
++
++        logger.info("Generated shirt configuration:")
++        shirt_dict = action.shirt.todict()
++
++        logger.info(
++            "\n" + yaml.dump(shirt_dict, default_flow_style=False, sort_keys=False)
++        )
++
++        logger.info("\nProvisioning shirt...")
++        action.provision()
++
++        logger.info(f"{shirt_type.upper()} shirt provisioning completed successfully!")
++
++    except Exception as e:
++        logger.error(f"Error creating {shirt_type.upper()} shirt: {e}")
++        traceback.print_exc()
++        sys.exit(1)
+ 
+@@ -189,6 +142,3 @@
+ 
+-    if args.shirt_type == "dusk":
+-        create_dusk_shirt()
+-    elif args.shirt_type == "daier":
+-        create_daier_shirt()
++    create_shirt(args.shirt_type)
+ 

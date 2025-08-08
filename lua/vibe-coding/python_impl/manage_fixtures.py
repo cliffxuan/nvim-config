@@ -11,6 +11,7 @@ Usage examples:
   python manage_fixtures.py process --generate-expected # Generate expected files only
   python manage_fixtures.py process --all              # Do both operations
   python manage_fixtures.py process -p                 # Preserve filenames in diffs
+  python manage_fixtures.py process --filter "joined"  # Process only fixtures with "joined" in name
 
   python manage_fixtures.py check                      # Test all fixtures
   python manage_fixtures.py check -f "joined"          # Test fixtures with "joined" in name
@@ -52,7 +53,7 @@ def extract_filenames_from_diff(diff_content):
     return source_file, target_file
 
 
-def generate_expected_files():
+def generate_expected_files(filter_name=None):
     """Generate expected files by applying diff_formatted to original files."""
     current_dir = PWD
     generated_count = 0
@@ -60,10 +61,16 @@ def generate_expected_files():
     skipped_count = 0
 
     print("Generating expected files by applying diff_formatted to original files...")
+    if filter_name:
+        print(f"Filtering fixtures by name containing: '{filter_name}'\n")
 
     # Find all directories that contain diff_formatted and original files
     for item in current_dir.iterdir():
         if not item.is_dir() or item.name in ["venv", "__pycache__", ".git"]:
+            continue
+
+        # Apply name filter if specified
+        if filter_name and filter_name.lower() not in item.name.lower():
             continue
 
         diff_formatted = item / "diff_formatted"
@@ -167,17 +174,23 @@ def generate_expected_files():
     return generated_count, failed_count, skipped_count
 
 
-def process_fixtures(preserve_filenames=False):
+def process_fixtures(preserve_filenames=False, filter_name=None):
     """Process all fixture directories and create diff_formatted files."""
     current_dir = PWD
     processed_count = 0
     failed_count = 0
 
     print("Processing fixture diffs to create diff_formatted files...")
+    if filter_name:
+        print(f"Filtering fixtures by name containing: '{filter_name}'\n")
 
     # Find all directories that contain diff and original files
     for item in current_dir.iterdir():
         if not item.is_dir() or item.name in ["venv", "__pycache__", ".git"]:
+            continue
+
+        # Apply name filter if specified
+        if filter_name and filter_name.lower() not in item.name.lower():
             continue
 
         diff_file = item / "diff"
@@ -540,14 +553,16 @@ def process_command(args):
 
     # Execute operations
     if should_process_diffs:
-        processed, failed = process_fixtures(preserve_filenames=args.preserve_filenames)
+        processed, failed = process_fixtures(
+            preserve_filenames=args.preserve_filenames, filter_name=args.filter
+        )
         total_processed += processed
         total_failed += failed
 
     if should_generate_expected:
         if should_process_diffs:
             print()  # Add spacing between operations
-        generated, gen_failed, _ = generate_expected_files()
+        generated, gen_failed, _ = generate_expected_files(filter_name=args.filter)
         total_generated += generated
         total_gen_failed += gen_failed
 
@@ -612,9 +627,13 @@ def main():
     )
     process_parser.add_argument(
         "--force",
-        "-f",
         action="store_true",
         help="Skip confirmation prompts for destructive operations",
+    )
+    process_parser.add_argument(
+        "--filter",
+        "-f",
+        help="Filter fixtures by name (partial match, case-insensitive)",
     )
 
     # Check subcommand

@@ -1,6 +1,6 @@
 --- a/original.py
 +++ b/original.py
-@@ -3,7 +3,7 @@
+@@ -4,7 +4,7 @@
      response_model=Allocation,
      dependencies=[Depends(check_operator_permission)],
  )
@@ -9,7 +9,7 @@
      key = f"{REDIS_PREFIX}:shirt:{mixture}:{name}"
      data: str | None = redis_client.get(key)  # type: ignore
      if not data:
-@@ -11,9 +11,13 @@
+@@ -12,9 +12,13 @@
  
      # Get existing shirt data and update the quota
      shirt_data = json.loads(data)
