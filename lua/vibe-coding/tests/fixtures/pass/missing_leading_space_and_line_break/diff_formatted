@@ -1,6 +1,6 @@
 --- a/original.py
 +++ b/original.py
-@@ -4,11 +4,11 @@
+@@ -2,11 +2,11 @@
  def test_get_platform_shirts_success(mock_get_mixtures, mock_get_mixture_shirts):
      """Test successful retrieval of platform shirts."""
      from app.utils.shirt import get_platform_shirts

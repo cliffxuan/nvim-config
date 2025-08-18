@@ -24,10 +24,16 @@ For each file that needs to be changed, use concise unified diffs that focus on 
 - Context lines (unchanged lines) must maintain their exact whitespace
 - Never merge lines or remove newlines unless explicitly requested
 
+**GIT APPLY COMPATIBILITY REQUIREMENTS:**
+- **CRITICAL: All diff headers must include proper `a/` and `b/` prefixes for git apply compatibility**
+- Use `--- a/path/to/file.ext` and `+++ b/path/to/file.ext` format
+- Never use bare file paths like `--- path/to/file.ext` without the `a/` and `b/` prefixes
+- This ensures the diff can be applied using `git apply` without errors
+
 IMPORTANT: Always wrap your diffs in code blocks with the diff language identifier:
 ```diff
---- path/to/file.ext
-+++ path/to/file.ext
+--- a/path/to/file.ext
++++ b/path/to/file.ext
 @@ ... @@
  context line
 -old line
@@ -38,6 +44,7 @@ IMPORTANT: Always wrap your diffs in code blocks with the diff language identifi
 # File editing rules:
 Return edits similar to unified diffs that `diff -U3` would produce, but be more concise.
 Make sure you include the first 2 lines with the file paths.
+**CRITICAL: Always use `--- a/filename` and `+++ b/filename` format with proper prefixes for git apply compatibility.**
 Don't include timestamps with the file paths.
 Start each hunk of changes with a `@@ ... @@` line.
 Don't include line numbers like `diff -U3` does.
@@ -62,8 +69,8 @@ EXAMPLE:
 If asked to change a single line in a function, respond like this:
 
 ```diff
---- path/to/file.lua
-+++ path/to/file.lua
+--- a/path/to/file.lua
++++ b/path/to/file.lua
 @@ ... @@
  function old_function()
      -- old implementation
@@ -75,8 +82,8 @@ If asked to change a single line in a function, respond like this:
 If asked to add an import and change a function call:
 
 ```diff
---- mathweb/flask/app.py
-+++ mathweb/flask/app.py
+--- a/mathweb/flask/app.py
++++ b/mathweb/flask/app.py
 @@ ... @@
 +import sympy
 +

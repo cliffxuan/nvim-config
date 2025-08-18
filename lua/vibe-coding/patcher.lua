@@ -346,7 +346,7 @@ function VibePatcher.fix_diff_with_external_tool(diff_content, original_file_pat
   -- Execute fix_diff.py using plenary.job
   local job = plenary_job:new {
     command = 'python',
-    args = { fix_diff_script, temp_diff_file, original_file_path },
+    args = { fix_diff_script, temp_diff_file, original_file_path, '--preserve-filenames' },
     on_stderr = function(_, data)
       -- Collect stderr data for error reporting
       if data and data ~= '' then

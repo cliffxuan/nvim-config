@@ -8,9 +8,10 @@ import argparse
 import re
 import sys
 from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
+
+from hunk_locator import find_hunk_location
 
 
 # Configuration and Constants
@@ -53,16 +54,6 @@ class DiffConfig:
         new_count = max(DiffConfig.MIN_HUNK_SIZE, context_count + addition_count)
 
         return f"@@ -{start_line},{old_count} +{start_line},{new_count} @@"
-
-
-class LineType(Enum):
-    """Types of lines in diff processing."""
-
-    CONTEXT = " "
-    ADDITION = "+"
-    DELETION = "-"
-    HUNK_HEADER = "@@"
-    FILE_HEADER = "file"
 
 
 @dataclass
@@ -147,10 +138,6 @@ class Hunk:
             and other.line_range[0] <= self.line_range[1]
         )
 
-    def get_range(self) -> Tuple[int, int]:
-        """Get the line range for this hunk."""
-        return self.line_range
-
 
 @dataclass
 class LineMatch:
@@ -173,6 +160,117 @@ class DiffContext:
     # Enhanced context tracking
     processed_indices: set[int] = field(default_factory=set)
     last_original_index: int = -1
+
+    def has_incorrect_line_counts(self, header_line: str) -> bool:
+        """Check if the line counts in the header match the actual diff content."""
+        # Parse the current header counts
+        match = re.match(r"^@@ -(\d+),(\d+) \+(\d+),(\d+) @@", header_line)
+        if not match:
+            return True  # Can't parse, treat as malformed
+
+        _, count_old, _, count_new = map(int, match.groups())
+
+        # Calculate what the counts should be based on the actual content
+        context_lines = 0
+        deletion_lines = 0
+        addition_lines = 0
+
+        # Count lines in the hunk (after the header)
+        for i in range(self.line_index + 1, len(self.lines)):
+            line = self.lines[i]
+            if line.startswith(" "):
+                context_lines += 1
+            elif line.startswith("-"):
+                deletion_lines += 1
+            elif line.startswith("+"):
+                addition_lines += 1
+            elif not line.strip():  # Empty line - count as context
+                context_lines += 1
+            else:
+                # No prefix - treat as context line
+                context_lines += 1
+
+        # Calculate expected counts
+        expected_old_count = context_lines + deletion_lines
+        expected_new_count = context_lines + addition_lines
+
+        # Return True if counts don't match
+        return count_old != expected_old_count or count_new != expected_new_count
+
+    def get_potential_splits(self, line: str) -> list[list[str]]:
+        """Generate potential ways to split a line using only original file structure as context."""
+        splits = []
+
+        # Strip diff prefix if present
+        clean_line = line
+        if line.startswith((" ", "+", "-")):
+            clean_line = line[1:]
+
+        if not clean_line.strip():
+            return splits
+
+        # Generic approach: Only attempt splits at natural boundaries that would
+        # result in complete lines that exist in the original file.
+        # This is more conservative than pattern-based but still generic.
+
+        # Try splitting where we can find exact line matches in original for both parts
+        line_length = len(clean_line)
+
+        # Only try splits that would create meaningful, complete lines
+        for i in range(1, line_length):
+            left_part = clean_line[:i].rstrip()  # Remove trailing whitespace
+            right_part = clean_line[i:].lstrip()  # Remove leading whitespace
+
+            # Skip if either part would be empty
+            if not left_part.strip() or not right_part.strip():
+                continue
+
+            # Find all possible left part matches
+            left_matches = []
+            for i, orig_line in enumerate(self.original_lines):
+                if orig_line == left_part:
+                    left_matches.append(i)
+
+            if not left_matches:
+                continue
+
+            # Find all possible right part matches with correct indentation
+            right_stripped = right_part.strip()
+            right_matches = []
+            for i, orig_line in enumerate(self.original_lines):
+                if orig_line.strip() == right_stripped:
+                    right_matches.append((i, orig_line))
+
+            if not right_matches:
+                continue
+
+            # Find the best pairing based on proximity
+            best_split = None
+            best_distance = float("inf")
+
+            for left_idx in left_matches:
+                for right_idx, right_line in right_matches:
+                    distance = abs(right_idx - left_idx)
+                    if distance < best_distance:
+                        # Check if there should be an empty line between the parts
+                        if right_idx == left_idx + 2:
+                            # Parts are separated by one line - check if it's empty
+                            if (
+                                left_idx + 1 < len(self.original_lines)
+                                and not self.original_lines[left_idx + 1].strip()
+                            ):
+                                # Insert empty line between parts
+                                best_split = [left_part, "", right_line]
+                            else:
+                                best_split = [left_part, right_line]
+                        else:
+                            best_split = [left_part, right_line]
+                        best_distance = distance
+
+            if best_split:
+                splits.append(best_split)
+
+        return splits
 
 
 @dataclass
@@ -564,47 +662,7 @@ class DiffFixer:
             return True
 
         # Check if the line counts in the header match the actual diff content
-        return self._has_incorrect_line_counts(line, context)
-
-    def _has_incorrect_line_counts(
-        self, header_line: str, context: DiffContext
-    ) -> bool:
-        """Check if the line counts in the header match the actual diff content."""
-        import re
-
-        # Parse the current header counts
-        match = re.match(r"^@@ -(\d+),(\d+) \+(\d+),(\d+) @@", header_line)
-        if not match:
-            return True  # Can't parse, treat as malformed
-
-        _, count_old, _, count_new = map(int, match.groups())
-
-        # Calculate what the counts should be based on the actual content
-        context_lines = 0
-        deletion_lines = 0
-        addition_lines = 0
-
-        # Count lines in the hunk (after the header)
-        for i in range(context.line_index + 1, len(context.lines)):
-            line = context.lines[i]
-            if line.startswith(" "):
-                context_lines += 1
-            elif line.startswith("-"):
-                deletion_lines += 1
-            elif line.startswith("+"):
-                addition_lines += 1
-            elif not line.strip():  # Empty line - count as context
-                context_lines += 1
-            else:
-                # No prefix - treat as context line
-                context_lines += 1
-
-        # Calculate expected counts
-        expected_old_count = context_lines + deletion_lines
-        expected_new_count = context_lines + addition_lines
-
-        # Return True if counts don't match
-        return count_old != expected_old_count or count_new != expected_new_count
+        return context.has_incorrect_line_counts(line)
 
     def _get_missing_context_lines(
         self, last_index: int, current_index: int, context: DiffContext
@@ -805,7 +863,7 @@ class DiffFixer:
             original_content
             and not original_content.endswith("\n")
             and result
-            and not result.strip().endswith("\\ No newline at end of file")
+            and not result.strip().endswith(DiffConfig.NO_NEWLINE_MARKER)
             and self._diff_touches_last_line(result_parts, original_content)
         ):
             result += "\n\\ No newline at end of file"
@@ -845,10 +903,6 @@ class DiffFixer:
                 deletions += 1
 
         return additions - deletions
-
-    def _has_overlapping_hunks(self, hunks: list[list[str]]) -> bool:
-        """Check if any hunks have overlapping line ranges - delegates to unified method."""
-        return HunkManager.detect_overlaps(hunks)
 
     def _infer_hunk_range_from_malformed_header(
         self, hunk_lines: list[str]
@@ -898,22 +952,6 @@ class DiffFixer:
             deletions = 1
 
         return (anchor_line, anchor_line + deletions - 1)
-
-    def _merge_overlapping_hunks(
-        self, hunks: list[list[str]], original_content: str
-    ) -> list[list[str]]:
-        """Merge overlapping hunks that would cause git apply conflicts - delegates to unified method."""
-        return HunkManager.merge_overlapping_hunks(hunks, original_content)
-
-    def _get_hunk_line_range(self, hunk_lines: list[str]) -> tuple[int, int] | None:
-        """Get the line range (start_line, end_line) that a hunk covers in the original file."""
-        return Hunk.extract_range_from_lines(hunk_lines)
-
-    def _merge_hunk_group(
-        self, hunk_group: list[list[str]], original_content: str
-    ) -> list[str]:
-        """Merge a group of overlapping hunks - delegates to unified method."""
-        return HunkManager._merge_hunk_group(hunk_group, original_content)
 
     def _diff_touches_last_line(
         self, diff_lines: list[str], original_content: str
@@ -1033,7 +1071,7 @@ class DiffFixer:
                 if deletion_content.strip() == last_original_line.strip():
                     # This is a deletion of the last line - add line and separate marker
                     result.append(line)
-                    result.append("\\ No newline at end of file")
+                    result.append(DiffConfig.NO_NEWLINE_MARKER)
                 else:
                     result.append(line)
             elif line.startswith("+") and not line.startswith("+++"):
@@ -1057,7 +1095,7 @@ class DiffFixer:
                 if is_last_line:
                     # This is an addition representing the last line - add line and separate marker
                     result.append(line)
-                    result.append("\\ No newline at end of file")
+                    result.append(DiffConfig.NO_NEWLINE_MARKER)
                 else:
                     result.append(line)
             else:
@@ -1361,11 +1399,13 @@ class DiffFixer:
                 diff_content, original_content, original_file_path, preserve_filenames
             )
 
-    def _is_file_header(self, line: str) -> bool:
+    @staticmethod
+    def _is_file_header(line: str) -> bool:
         """Check if a line is a file header."""
         return line.startswith(("---", "+++"))
 
-    def _is_deletion_line(self, line: str) -> bool:
+    @staticmethod
+    def _is_deletion_line(line: str) -> bool:
         """Check if a line is a deletion line."""
         return line.startswith("-") and not line.startswith("---")
 
@@ -1516,9 +1556,9 @@ class DiffFixer:
             return result
         if not result:
             return result
-        if result.strip().endswith("\\ No newline at end of file"):
+        if result.strip().endswith(DiffConfig.NO_NEWLINE_MARKER):
             return result
-        if any("\\ No newline at end of file" in line for line in fixed_lines):
+        if any(DiffConfig.NO_NEWLINE_MARKER in line for line in fixed_lines):
             return result
         if not self._diff_touches_last_line(fixed_lines, original_content):
             return result
@@ -1532,12 +1572,29 @@ class DiffFixer:
         original_lines = original_content.split("\n")
         self.line_analyzer = LineAnalyzer(original_lines)
 
+    @staticmethod
     def _fix_file_header(
-        self, line: str, original_file_path: str, preserve_filenames: bool
+        line: str, original_file_path: str, preserve_filenames: bool
     ) -> str:
         """Fix file header line."""
         if preserve_filenames:
-            return line
+            # Even when preserving filenames, fix missing a/ and b/ prefixes
+            if line.startswith("---"):
+                # Extract the file path from the header
+                file_path = line[3:].strip()  # Remove "---" and whitespace
+                # Add a/ prefix if not already present and not /dev/null
+                if file_path != "/dev/null" and not file_path.startswith(("a/", "b/")):
+                    return f"--- a/{file_path}"
+                return line
+            elif line.startswith("+++"):
+                # Extract the file path from the header
+                file_path = line[3:].strip()  # Remove "+++" and whitespace
+                # Add b/ prefix if not already present and not /dev/null
+                if file_path != "/dev/null" and not file_path.startswith(("a/", "b/")):
+                    return f"+++ b/{file_path}"
+                return line
+            else:
+                return line
 
         filename = Path(original_file_path).name
         if line.startswith("---"):
@@ -1545,7 +1602,8 @@ class DiffFixer:
         else:
             return f"+++ b/{filename}"
 
-    def _basic_line_fix(self, line: str) -> str:
+    @staticmethod
+    def _basic_line_fix(line: str) -> str:
         """Apply basic fixes to lines that don't match specific rules."""
         if not line:
             return line
@@ -1603,7 +1661,7 @@ class DiffFixer:
             return False  # Don't split if exact match exists
 
         # Try different split strategies and see if parts match exactly
-        potential_splits = self._get_potential_splits(line, context)
+        potential_splits = context.get_potential_splits(line)
 
         for split_parts in potential_splits:
             # Check if split parts individually exist exactly in original
@@ -1620,26 +1678,6 @@ class DiffFixer:
                 return True
 
         return False
-
-    def _validate_deleted_line(self, line: str, context: DiffContext) -> str:
-        """Validate that a deleted line exists in the original file with exact indentation."""
-        if not line.startswith("-"):
-            return line
-
-        content = line[1:]  # Remove the - prefix
-        match = self._find_exact_line_match(content, context, context.line_index)
-
-        if match:
-            # Line exists in original with exact indentation - keep as deleted
-            return line
-        else:
-            # Try to find a similar line and suggest correction
-            corrected_line = self._find_best_deletion_match(content, context)
-            if corrected_line:
-                return "-" + corrected_line
-            else:
-                # No match found - this might be an error, but keep the line
-                return line
 
     def _validate_unchanged_line(self, line: str, context: DiffContext) -> str:
         """Validate that an unchanged line exists in the original file with exact indentation."""
@@ -1714,81 +1752,6 @@ class DiffFixer:
 
         return None
 
-    def _get_potential_splits(self, line: str, context: DiffContext) -> list[list[str]]:
-        """Generate potential ways to split a line using only original file structure as context."""
-        splits = []
-
-        # Strip diff prefix if present
-        clean_line = line
-        if line.startswith((" ", "+", "-")):
-            clean_line = line[1:]
-
-        if not clean_line.strip():
-            return splits
-
-        # Generic approach: Only attempt splits at natural boundaries that would
-        # result in complete lines that exist in the original file.
-        # This is more conservative than pattern-based but still generic.
-
-        # Try splitting where we can find exact line matches in original for both parts
-        line_length = len(clean_line)
-
-        # Only try splits that would create meaningful, complete lines
-        for i in range(1, line_length):
-            left_part = clean_line[:i].rstrip()  # Remove trailing whitespace
-            right_part = clean_line[i:].lstrip()  # Remove leading whitespace
-
-            # Skip if either part would be empty
-            if not left_part.strip() or not right_part.strip():
-                continue
-
-            # Find all possible left part matches
-            left_matches = []
-            for i, orig_line in enumerate(context.original_lines):
-                if orig_line == left_part:
-                    left_matches.append(i)
-
-            if not left_matches:
-                continue
-
-            # Find all possible right part matches with correct indentation
-            right_stripped = right_part.strip()
-            right_matches = []
-            for i, orig_line in enumerate(context.original_lines):
-                if orig_line.strip() == right_stripped:
-                    right_matches.append((i, orig_line))
-
-            if not right_matches:
-                continue
-
-            # Find the best pairing based on proximity
-            best_split = None
-            best_distance = float("inf")
-
-            for left_idx in left_matches:
-                for right_idx, right_line in right_matches:
-                    distance = abs(right_idx - left_idx)
-                    if distance < best_distance:
-                        # Check if there should be an empty line between the parts
-                        if right_idx == left_idx + 2:
-                            # Parts are separated by one line - check if it's empty
-                            if (
-                                left_idx + 1 < len(context.original_lines)
-                                and not context.original_lines[left_idx + 1].strip()
-                            ):
-                                # Insert empty line between parts
-                                best_split = [left_part, "", right_line]
-                            else:
-                                best_split = [left_part, right_line]
-                        else:
-                            best_split = [left_part, right_line]
-                        best_distance = distance
-
-            if best_split:
-                splits.append(best_split)
-
-        return splits
-
     def _find_properly_indented_line(self, content: str, context: DiffContext) -> str:
         """Find the line with proper indentation from the original file."""
         content_stripped = content.strip()
@@ -1857,8 +1820,9 @@ class DiffFixer:
         # Fallback: return first match (could be improved with more sophisticated heuristics)
         return matches[0]
 
+    @staticmethod
     def _find_best_contextual_match(
-        self, matches: list[tuple[int, str]], context: DiffContext, diff_line_index: int
+        matches: list[tuple[int, str]], context: DiffContext, diff_line_index: int
     ) -> tuple[int, str] | None:
         """Find best match based on surrounding context in the diff."""
         # Look at lines before and after in the diff to find context
@@ -1895,16 +1859,11 @@ class DiffFixer:
 
         return None
 
-    def _line_exists_in_original(self, line_content: str, context: DiffContext) -> bool:
-        """Check if a line exists in the original file (with exact indentation)."""
-        match = self._find_exact_line_match(line_content, context)
-        return match is not None
-
     def _split_joined_line_with_context(
         self, line: str, context: DiffContext
     ) -> list[str]:
         """Split joined line using strict original file context matching."""
-        potential_splits = self._get_potential_splits(line, context)
+        potential_splits = context.get_potential_splits(line)
 
         # Find the best split based on exact matches in original file
         best_split = None
@@ -2090,7 +2049,7 @@ class DiffFixer:
             return [clean_header]
 
         # Check if the header has incorrect line counts
-        if self._has_incorrect_line_counts(line, context):
+        if context.has_incorrect_line_counts(line):
             # Infer correct header from content
             inferred_header = self._infer_hunk_header(context)
             return [inferred_header]
@@ -2102,6 +2061,11 @@ class DiffFixer:
         # Look for the first deletion or context line to find the actual start position
         # This is more reliable for multi-hunk diffs than searching for general context
 
+        result = find_hunk_location(
+            "\n".join(context.lines), "\n".join(context.original_lines)
+        )
+        if result and result[2] > 0.9:
+            return self._calculate_hunk_header_from_anchor(context, result[0] + 1)
         for i in range(context.line_index + 1, len(context.lines)):
             line = context.lines[i]
 
@@ -2119,6 +2083,7 @@ class DiffFixer:
                 # Raw line without prefix - could be missing prefix
                 search_text = line
 
+            # TODO: search_text is only one line
             if not search_text or not search_text.strip():
                 continue
 

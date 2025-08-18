@@ -205,6 +205,7 @@ def process_fixtures(preserve_filenames=False, filter_name=None):
                 fix_diff_path = Path(__file__).parent / "fix_diff.py"
                 cmd = [
                     "python",
+                    "-u",
                     str(fix_diff_path),
                     str(diff_file),
                     str(original_file),
@@ -217,7 +218,6 @@ def process_fixtures(preserve_filenames=False, filter_name=None):
 
                 subprocess.run(
                     cmd,
-                    capture_output=True,
                     text=True,
                     check=True,
                 )
