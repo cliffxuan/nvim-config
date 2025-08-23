@@ -142,15 +142,6 @@ class Hunk:
 
 
 @dataclass
-class LineMatch:
-    """Information about matching lines in original file."""
-
-    line_index: int
-    content: str
-    confidence: float = 1.0
-
-
-@dataclass
 class DiffContext:
     """Context information for diff processing."""
 
@@ -274,6 +265,19 @@ class DiffContext:
 
         return splits
 
+    def find_similar_match(self, content: str) -> str | None:
+        """Find match based on stripped content (ignoring indentation)."""
+        stripped_content = content.strip()
+        if stripped_content:
+            for orig_line in self.original_lines:
+                if orig_line.strip() == stripped_content:
+                    return orig_line
+        else:
+            for orig_line in self.original_lines:
+                if not orig_line.strip():
+                    return orig_line
+        return None
+
 
 @dataclass
 class DiffFixRule:
@@ -284,60 +288,6 @@ class DiffFixRule:
     fixer: Callable[[str, DiffContext], list[str]]
     priority: int = 0  # Higher priority rules are applied first
     applies_to: str = "all"  # "header", "body", or "all"
-
-
-class LineAnalyzer:
-    """Handles line matching and validation operations."""
-
-    def __init__(self, original_lines: list[str]):
-        self.original_lines = original_lines
-        self._line_cache = self._build_line_cache()
-
-    def _build_line_cache(self) -> dict[str, list[int]]:
-        """Build cache for faster line lookups."""
-        cache = {}
-        for i, line in enumerate(self.original_lines):
-            if line not in cache:
-                cache[line] = []
-            cache[line].append(i)
-        return cache
-
-    def find_exact_match(
-        self, line_content: str, context_line_index: int | None = None
-    ) -> LineMatch | None:
-        """Find exact line match with contextual disambiguation."""
-        if line_content not in self._line_cache:
-            return None
-
-        matches = self._line_cache[line_content]
-        if len(matches) == 1:
-            return LineMatch(matches[0], line_content)
-
-        # Use context for disambiguation if available
-        if context_line_index is not None and len(matches) > 1:
-            # Simple proximity-based disambiguation
-            best_match = min(matches, key=lambda x: abs(x - context_line_index))
-            return LineMatch(best_match, line_content, confidence=0.8)
-
-        return LineMatch(matches[0], line_content, confidence=0.6)
-
-    def find_similar_match(self, content: str) -> LineMatch | None:
-        """Find match based on stripped content (ignoring indentation)."""
-        stripped_content = content.strip()
-        if not stripped_content:
-            return self._find_empty_line_match()
-
-        for i, orig_line in enumerate(self.original_lines):
-            if orig_line.strip() == stripped_content:
-                return LineMatch(i, orig_line, confidence=0.7)
-        return None
-
-    def _find_empty_line_match(self) -> LineMatch | None:
-        """Find empty lines in original file."""
-        for i, orig_line in enumerate(self.original_lines):
-            if not orig_line.strip():
-                return LineMatch(i, orig_line)
-        return None
 
 
 class HunkManager:
@@ -429,9 +379,7 @@ class HunkManager:
                     break
 
             if len(overlapping_group) > 1:
-                merged_hunk = HunkManager._merge_hunk_group(
-                    overlapping_group, original_content
-                )
+                merged_hunk = HunkManager._merge_hunk_group(overlapping_group)
                 merged.append(merged_hunk)
                 i = j
             else:
@@ -446,9 +394,7 @@ class HunkManager:
         return range1[0] <= range2[1] and range2[0] <= range1[1]
 
     @staticmethod
-    def _merge_hunk_group(
-        hunk_group: list[list[str]], original_content: str
-    ) -> list[str]:
+    def _merge_hunk_group(hunk_group: list[list[str]]) -> list[str]:
         """Merge group of hunks preserving empty lines."""
         if len(hunk_group) == 1:
             return hunk_group[0]
@@ -858,8 +804,6 @@ class DiffFixer:
         self, header_line: str, cumulative_offset: int
     ) -> str:
         """Adjust hunk header line numbers based on cumulative offset from previous hunks."""
-        import re
-
         match = re.match(r"^@@ -(\d+),(\d+) \+(\d+),(\d+) @@", header_line)
         if not match:
             return header_line
@@ -1230,9 +1174,7 @@ class DiffFixer:
 
             # Handle whitespace-only context lines
             if line.startswith(" ") and not line.strip():
-                processed_result = self._process_whitespace_only_context_line(
-                    line, context
-                )
+                processed_result = self._validate_unchanged_line(line, context)
                 fixed_lines.append(processed_result)
                 i += 1
                 continue
@@ -1312,9 +1254,6 @@ class DiffFixer:
         if not diff_content.strip():
             return "\n"
 
-        # Set up common processing environment
-        self._setup_processing_environment(original_content)
-
         # Check if this is a multi-hunk diff
         hunk_count = diff_content.count("@@") // 2
         if hunk_count > 1:
@@ -1347,9 +1286,7 @@ class DiffFixer:
         deletion_content = line[1:]  # Remove - prefix
 
         # Find exact match in original file
-        exact_match = self._find_exact_line_match(
-            deletion_content, context, context.line_index
-        )
+        exact_match = self._find_exact_line_match(deletion_content, context)
 
         if exact_match:
             # Valid deletion - line exists in original with correct indentation
@@ -1359,7 +1296,7 @@ class DiffFixer:
             }
         else:
             # Try to find similar line with corrected indentation
-            corrected_line = self._find_best_deletion_match(deletion_content, context)
+            corrected_line = context.find_similar_match(deletion_content)
             if corrected_line:
                 return {
                     "line": "-" + corrected_line,
@@ -1368,13 +1305,6 @@ class DiffFixer:
             else:
                 # No match found - keep original but don't update index
                 return {"line": line, "line_index": None}
-
-    def _process_whitespace_only_context_line(
-        self, line: str, context: DiffContext
-    ) -> str:
-        """Process a whitespace-only context line."""
-        # This might be a whitespace-only context line representing an empty line
-        return self._validate_unchanged_line(line, context)
 
     def _process_context_line(
         self,
@@ -1389,9 +1319,7 @@ class DiffFixer:
             dict: Contains 'should_continue', 'lines', 'line_index', 'recently_processed_deletion'
         """
         content_after_prefix = line[1:]
-        exact_match = self._find_exact_line_match(
-            content_after_prefix, context, context.line_index
-        )
+        exact_match = self._find_exact_line_match(content_after_prefix, context)
 
         if exact_match:
             # Only check for missing context if we haven't just processed a deletion
@@ -1426,9 +1354,7 @@ class DiffFixer:
             # Line starts with space but doesn't match - this might be a line
             # missing a prefix where the content happens to start with spaces.
             # Check if the line as-is (without stripping) exists in original
-            whole_line_match = self._find_exact_line_match(
-                line, context, context.line_index
-            )
+            whole_line_match = self._find_exact_line_match(line, context)
             if whole_line_match:
                 # The whole line (including leading spaces) exists in original
                 # This is content missing its diff prefix - add space prefix
@@ -1492,12 +1418,6 @@ class DiffFixer:
 
         # All conditions met - add the marker
         return result + "\n\\ No newline at end of file"
-
-    def _setup_processing_environment(self, original_content: str) -> None:
-        """Set up common processing environment for both single and multi-hunk processing."""
-        # Create LineAnalyzer for optimized line matching
-        original_lines = original_content.split("\n")
-        self.line_analyzer = LineAnalyzer(original_lines)
 
     @staticmethod
     def _fix_file_header(
@@ -1565,9 +1485,7 @@ class DiffFixer:
         # 2. It can be split into parts that DO exist in the original file
 
         # First check if the line exists as-is in original
-        exact_match = self._find_exact_line_match(
-            line_content, context, context.line_index
-        )
+        exact_match = self._find_exact_line_match(line_content, context)
         if exact_match:
             return False  # Line exists as-is, no need to split
 
@@ -1581,9 +1499,7 @@ class DiffFixer:
         if line.startswith((" ", "+", "-")):
             clean_line = line[1:]
 
-        exact_match = self._find_exact_line_match(
-            clean_line, context, context.line_index
-        )
+        exact_match = self._find_exact_line_match(clean_line, context)
         if exact_match:
             return False  # Don't split if exact match exists
 
@@ -1594,9 +1510,7 @@ class DiffFixer:
             # Check if split parts individually exist exactly in original
             exact_matches = 0
             for part in split_parts:
-                exact_match = self._find_exact_line_match(
-                    part, context, context.line_index
-                )
+                exact_match = self._find_exact_line_match(part, context)
                 if exact_match:
                     exact_matches += 1
 
@@ -1612,72 +1526,20 @@ class DiffFixer:
             return line
 
         content = line[1:]  # Remove the space prefix
-        match = self._find_exact_line_match(content, context, context.line_index)
+        match = self._find_exact_line_match(content, context)
 
         if match:
             # Line exists in original with exact indentation - keep as unchanged
             return line
         else:
             # Try to find the closest match and correct indentation
-            corrected_line = self._find_best_unchanged_match(content, context)
+            corrected_line = context.find_similar_match(content)
             if corrected_line is not None:
                 # corrected_line already has proper indentation from original, just add diff prefix
                 return " " + corrected_line
             else:
                 # No match found - might be an addition instead
                 return "+" + content
-
-    def _find_best_deletion_match(
-        self, content: str, context: DiffContext
-    ) -> str | None:
-        """Find the best matching line in original for a deletion (including indentation correction)."""
-        # Use LineAnalyzer for optimized similar matching
-        if hasattr(self, "line_analyzer"):
-            match = self.line_analyzer.find_similar_match(content)
-            if match:
-                return match.content
-            return None
-
-        # Fallback to original implementation
-        content_stripped = content.strip()
-        if not content_stripped:
-            return None
-
-        # Look for lines with same content but potentially different indentation
-        for orig_line in context.original_lines:
-            if orig_line.strip() == content_stripped:
-                return orig_line  # Return with correct indentation
-
-        return None
-
-    def _find_best_unchanged_match(
-        self, content: str, context: DiffContext
-    ) -> str | None:
-        """Find the best matching line in original for unchanged context (including indentation correction)."""
-        # Use LineAnalyzer for optimized similar matching
-        if hasattr(self, "line_analyzer"):
-            match = self.line_analyzer.find_similar_match(content)
-            if match:
-                return match.content
-            return None
-
-        # Fallback to original implementation
-        content_stripped = content.strip()
-
-        # Special case: if content is only whitespace, it might represent an empty line
-        if not content_stripped:
-            # Check if there are empty lines in original - this might be a misrepresented empty line
-            for orig_line in context.original_lines:
-                if not orig_line.strip():  # Found an empty line in original
-                    return orig_line  # Return the empty line
-            return None
-
-        # Look for lines with same content but potentially different indentation
-        for orig_line in context.original_lines:
-            if orig_line.strip() == content_stripped:
-                return orig_line  # Return with correct indentation
-
-        return None
 
     def _find_properly_indented_line(self, content: str, context: DiffContext) -> str:
         """Find the line with proper indentation from the original file."""
@@ -1697,18 +1559,8 @@ class DiffFixer:
         self,
         line_content: str,
         context: DiffContext,
-        context_line_index: int | None = None,
     ) -> tuple[int, str] | None:
         """Find exact line match in original file, considering context for disambiguation."""
-        # Use LineAnalyzer for optimized matching
-        if hasattr(self, "line_analyzer"):
-            match = self.line_analyzer.find_exact_match(
-                line_content, context_line_index
-            )
-            if match:
-                return (match.line_index, match.content)
-            return None
-
         # Fallback to original implementation for backward compatibility
         clean_line = line_content
 
@@ -1724,32 +1576,27 @@ class DiffFixer:
             return matches[0]
 
         # Multiple matches - use context to disambiguate
-        return self._disambiguate_line_matches(matches, context, context_line_index)
+        return self._disambiguate_line_matches(matches, context)
 
     def _disambiguate_line_matches(
         self,
         matches: list[tuple[int, str]],
         context: DiffContext,
-        context_line_index: int | None = None,
     ) -> tuple[int, str]:
         """Disambiguate multiple line matches using surrounding context."""
         if len(matches) == 1:
             return matches[0]
 
-        # If we have context about where we are in the diff, use surrounding lines
-        if context_line_index is not None:
-            best_match = self._find_best_contextual_match(
-                matches, context, context_line_index
-            )
-            if best_match:
-                return best_match
+        best_match = self._find_best_contextual_match(matches, context)
+        if best_match:
+            return best_match
 
         # Fallback: return first match (could be improved with more sophisticated heuristics)
         return matches[0]
 
     @staticmethod
     def _find_best_contextual_match(
-        matches: list[tuple[int, str]], context: DiffContext, diff_line_index: int
+        matches: list[tuple[int, str]], context: DiffContext
     ) -> tuple[int, str] | None:
         """Find best match based on surrounding context in the diff."""
         # Look at lines before and after in the diff to find context
@@ -1763,7 +1610,7 @@ class DiffFixer:
                 if offset == 0:  # Skip the target line itself
                     continue
 
-                diff_idx = diff_line_index + offset
+                diff_idx = context.line_index + offset
                 orig_idx = match_line_idx + offset
 
                 if 0 <= diff_idx < len(context.lines) and 0 <= orig_idx < len(
@@ -1800,7 +1647,7 @@ class DiffFixer:
             score = 0
             for part in split_parts:
                 # Count exact matches (including indentation)
-                match = self._find_exact_line_match(part, context, context.line_index)
+                match = self._find_exact_line_match(part, context)
                 if match:
                     score += 1
 
@@ -1834,7 +1681,7 @@ class DiffFixer:
             return "+" + part  # Addition - no empty lines in original
 
         # Check if this part exists exactly in original (including indentation)
-        match = self._find_exact_line_match(part, context, context.line_index)
+        match = self._find_exact_line_match(part, context)
         if match:
             # Part already has correct indentation from original file, just add diff prefix
             return " " + part  # Context line - exact match found
@@ -1854,7 +1701,7 @@ class DiffFixer:
             return line
 
         # Check if this exact line (with indentation) exists in the original file
-        match = self._find_exact_line_match(line, context, context.line_index)
+        match = self._find_exact_line_match(line, context)
         if match:
             return " " + line  # Context line - exact match found
         else:
