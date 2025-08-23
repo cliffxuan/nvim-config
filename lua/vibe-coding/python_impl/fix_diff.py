@@ -2417,38 +2417,16 @@ class DiffFixer:
 
             # Check if left part matches original at start_pos
             if (
-                start_pos < len(original_lines)
+                start_pos + 1 < len(original_lines)
                 and original_lines[start_pos] == left_part
+                and original_lines[start_pos + 1].strip() == right_part.strip()
             ):
-                # Check if right part matches original at start_pos + 1
-                if (
-                    start_pos + 1 < len(original_lines)
-                    and original_lines[start_pos + 1].strip() == right_part.strip()
-                ):
-                    splits.append({"parts": [left_part, right_part], "confidence": 0.9})
-
-                # Also try right part with additional splits
-                remaining = right_part
-                pos = start_pos + 1
-
-                # Try to split the right part further
-                for split_point2 in range(1, len(remaining)):
-                    next_part = remaining[:split_point2].rstrip()
-                    rest_part = remaining[split_point2:].lstrip()
-
-                    if (
-                        pos < len(original_lines)
-                        and original_lines[pos] == next_part
-                        and pos + 1 < len(original_lines)
-                        and original_lines[pos + 1] == rest_part
-                    ):
-                        splits.append(
-                            {
-                                "parts": [left_part, next_part, rest_part],
-                                "confidence": 0.8,
-                            }
-                        )
-                        break
+                splits.append(
+                    {
+                        "parts": [left_part, original_lines[start_pos + 1]],
+                        "confidence": 0.9,
+                    }
+                )
 
         # Sort by confidence
         splits.sort(key=lambda x: x["confidence"], reverse=True)
