@@ -15,7 +15,6 @@ from fix_diff import DiffContext, DiffFixer
 
 def test_calculate_hunk_header_from_anchor_basic():
     """Test basic functionality of enhanced _calculate_hunk_header_from_anchor."""
-    fixer = DiffFixer()
 
     original_lines = [
         "def function():",
@@ -40,7 +39,7 @@ def test_calculate_hunk_header_from_anchor_basic():
         preserve_filenames=False,
     )
 
-    result = fixer._calculate_hunk_header_from_anchor(context, 1)
+    result = context.calculate_hunk_header_from_anchor(1)
     expected = "@@ -1,4 +1,4 @@"
 
     print(f"Result: {result}")

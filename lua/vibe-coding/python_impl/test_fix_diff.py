@@ -45,7 +45,7 @@ class TestDiffFixer:
         assert any(line.startswith("@@") for line in lines)
 
     def test_calculate_hunk_header_from_anchor_basic(self):
-        """Test basic functionality of enhanced _calculate_hunk_header_from_anchor."""
+        """Test basic functionality of enhanced calculate_hunk_header_from_anchor."""
         original_lines = [
             "def function():",
             "    return True",
@@ -69,7 +69,7 @@ class TestDiffFixer:
             preserve_filenames=False,
         )
 
-        result = self.fixer._calculate_hunk_header_from_anchor(context, 1)
+        result = context.calculate_hunk_header_from_anchor(1)
         assert result == "@@ -1,4 +1,4 @@"
 
     def test_reconcile_lines_from_anchor_simple(self):
