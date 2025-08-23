@@ -4,12 +4,14 @@ Fix malformatted diff files to make them compatible with git apply.
 Refactored to follow generic, configurable principles instead of hard-coded patterns.
 """
 
+from __future__ import annotations
+
 import argparse
 import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable
 
 from hunk_locator import find_hunk_location
 
@@ -61,17 +63,17 @@ class Hunk:
     """Unified hunk representation with parsing and range extraction capabilities."""
 
     header_line: str
-    content_lines: List[str]
+    content_lines: list[str]
     start_line: int
     old_count: int
     new_count: int
     new_start: int
-    line_range: Tuple[int, int]
+    line_range: tuple[int, int]
 
     @classmethod
     def from_header(
-        cls, header_line: str, content_lines: List[str] | None = None
-    ) -> Optional["Hunk"]:
+        cls, header_line: str, content_lines: list[str] | None = None
+    ) -> Hunk | None:
         """Create Hunk from header line with unified parsing logic."""
         match = DiffConfig.HUNK_HEADER_PATTERN.match(header_line)
         if not match:
@@ -91,7 +93,7 @@ class Hunk:
         )
 
     @classmethod
-    def from_lines(cls, hunk_lines: List[str]) -> Optional["Hunk"]:
+    def from_lines(cls, hunk_lines: list[str]) -> Hunk | None:
         """Create Hunk from list of lines, extracting header and content."""
         if not hunk_lines:
             return None
@@ -118,7 +120,7 @@ class Hunk:
         return cls.from_header(header_line, content_lines)
 
     @staticmethod
-    def extract_range_from_lines(hunk_lines: List[str]) -> Optional[Tuple[int, int]]:
+    def extract_range_from_lines(hunk_lines: list[str]) -> tuple[int, int] | None:
         """Extract line range from hunk lines - unified method replacing duplicates."""
         if not hunk_lines:
             return None
@@ -152,8 +154,8 @@ class LineMatch:
 class DiffContext:
     """Context information for diff processing."""
 
-    lines: List[str]
-    original_lines: List[str]
+    lines: list[str]
+    original_lines: list[str]
     line_index: int
     preserve_filenames: bool
 
@@ -279,7 +281,7 @@ class DiffFixRule:
 
     name: str
     matcher: Callable[[str, DiffContext], bool]
-    fixer: Callable[[str, DiffContext], List[str]]
+    fixer: Callable[[str, DiffContext], list[str]]
     priority: int = 0  # Higher priority rules are applied first
     applies_to: str = "all"  # "header", "body", or "all"
 
@@ -287,11 +289,11 @@ class DiffFixRule:
 class LineAnalyzer:
     """Handles line matching and validation operations."""
 
-    def __init__(self, original_lines: List[str]):
+    def __init__(self, original_lines: list[str]):
         self.original_lines = original_lines
         self._line_cache = self._build_line_cache()
 
-    def _build_line_cache(self) -> Dict[str, List[int]]:
+    def _build_line_cache(self) -> dict[str, list[int]]:
         """Build cache for faster line lookups."""
         cache = {}
         for i, line in enumerate(self.original_lines):
@@ -301,8 +303,8 @@ class LineAnalyzer:
         return cache
 
     def find_exact_match(
-        self, line_content: str, context_line_index: Optional[int] = None
-    ) -> Optional[LineMatch]:
+        self, line_content: str, context_line_index: int | None = None
+    ) -> LineMatch | None:
         """Find exact line match with contextual disambiguation."""
         if line_content not in self._line_cache:
             return None
@@ -319,7 +321,7 @@ class LineAnalyzer:
 
         return LineMatch(matches[0], line_content, confidence=0.6)
 
-    def find_similar_match(self, content: str) -> Optional[LineMatch]:
+    def find_similar_match(self, content: str) -> LineMatch | None:
         """Find match based on stripped content (ignoring indentation)."""
         stripped_content = content.strip()
         if not stripped_content:
@@ -330,7 +332,7 @@ class LineAnalyzer:
                 return LineMatch(i, orig_line, confidence=0.7)
         return None
 
-    def _find_empty_line_match(self) -> Optional[LineMatch]:
+    def _find_empty_line_match(self) -> LineMatch | None:
         """Find empty lines in original file."""
         for i, orig_line in enumerate(self.original_lines):
             if not orig_line.strip():
@@ -342,7 +344,7 @@ class HunkManager:
     """Unified manager for hunk operations including overlap detection and merging."""
 
     @staticmethod
-    def detect_overlaps(hunks: List[List[str]]) -> bool:
+    def detect_overlaps(hunks: list[list[str]]) -> bool:
         """Unified overlap detection replacing duplicate methods."""
         if len(hunks) <= 1:
             return False
@@ -358,7 +360,7 @@ class HunkManager:
         return HunkManager._has_range_overlaps(ranges)
 
     @staticmethod
-    def detect_overlaps_from_hunk_objects(hunks: List[Hunk]) -> bool:
+    def detect_overlaps_from_hunk_objects(hunks: list[Hunk]) -> bool:
         """Detect overlaps from Hunk objects."""
         if len(hunks) <= 1:
             return False
@@ -370,7 +372,7 @@ class HunkManager:
         return False
 
     @staticmethod
-    def _has_range_overlaps(ranges: List[Tuple[int, int]]) -> bool:
+    def _has_range_overlaps(ranges: list[tuple[int, int]]) -> bool:
         """Check if any ranges overlap - unified logic."""
         for i in range(len(ranges)):
             for j in range(i + 1, len(ranges)):
@@ -381,8 +383,8 @@ class HunkManager:
 
     @staticmethod
     def merge_overlapping_hunks(
-        hunks: List[List[str]], original_content: str
-    ) -> List[List[str]]:
+        hunks: list[list[str]], original_content: str
+    ) -> list[list[str]]:
         """Merge overlapping hunks with unified logic."""
         if not HunkManager.detect_overlaps(hunks):
             return hunks
@@ -391,8 +393,8 @@ class HunkManager:
 
     @staticmethod
     def _perform_merge(
-        hunks: List[List[str]], original_content: str
-    ) -> List[List[str]]:
+        hunks: list[list[str]], original_content: str
+    ) -> list[list[str]]:
         """Perform the actual merging with empty line preservation."""
         merged = []
         i = 0
@@ -439,14 +441,14 @@ class HunkManager:
         return merged
 
     @staticmethod
-    def _ranges_overlap(range1: Tuple[int, int], range2: Tuple[int, int]) -> bool:
+    def _ranges_overlap(range1: tuple[int, int], range2: tuple[int, int]) -> bool:
         """Check if two ranges overlap - unified method."""
         return range1[0] <= range2[1] and range2[0] <= range1[1]
 
     @staticmethod
     def _merge_hunk_group(
-        hunk_group: List[List[str]], original_content: str
-    ) -> List[str]:
+        hunk_group: list[list[str]], original_content: str
+    ) -> list[str]:
         """Merge group of hunks preserving empty lines."""
         if len(hunk_group) == 1:
             return hunk_group[0]
@@ -504,9 +506,7 @@ class DiffFixer:
         """Common hunk content processing logic shared between single and multi-hunk processing."""
         processed_lines = []
 
-        for i, line in enumerate(hunk_lines):
-            context.line_index = i
-
+        for line in hunk_lines:
             # Handle hunk headers with malformed content or incorrect counts
             if line.startswith("@@"):
                 if self._is_malformed_hunk_header(line, context):
@@ -602,7 +602,7 @@ class DiffFixer:
 
         return False
 
-    def _create_default_rules(self) -> List[DiffFixRule]:
+    def _create_default_rules(self) -> list[DiffFixRule]:
         """Create default set of configurable rules."""
         return [
             # Rule for malformed hunk headers (header-only)
@@ -2180,7 +2180,7 @@ class DiffFixer:
                 else:
                     # Check for joined deletion line
                     join_result = self._try_resolve_deletion_mismatch(
-                        line, diff_lines[i:], original_lines, orig_position
+                        line, original_lines, orig_position
                     )
                     if join_result["resolved"]:
                         processed_lines.extend(join_result["lines"])
@@ -2297,7 +2297,6 @@ class DiffFixer:
     def _try_resolve_deletion_mismatch(
         self,
         line: str,
-        remaining_diff: list[str],
         original_lines: list[str],
         orig_pos: int,
     ) -> dict:
@@ -2571,35 +2570,6 @@ class DiffFixer:
 
         # If we can't find the content, return the claimed line as fallback
         return claimed_start_line
-
-    def _add_context_lines_around_single_hunk(
-        self, lines: list[str], original_content: str
-    ) -> list[str]:
-        """Add context lines around a single hunk if it has only added/deleted lines."""
-        if not lines:
-            return lines
-
-        # Find file headers and hunk header
-        file_headers = []
-        hunk_start = None
-
-        for i, line in enumerate(lines):
-            if line.startswith(("---", "+++")):
-                file_headers.append(line)
-            elif line.startswith("@@"):
-                hunk_start = i
-                break
-
-        if hunk_start is None:
-            return lines
-
-        # Apply the same logic as for multi-hunk
-        hunk_lines = lines[hunk_start:]
-        hunk_with_context = self._add_context_lines_around_hunk(
-            hunk_lines, original_content
-        )
-
-        return file_headers + hunk_with_context
 
     def _extract_clean_header(self, line: str) -> str:
         """Extract clean hunk header from malformed line."""

@@ -177,11 +177,8 @@ class TestDiffFixer:
 
         # Test joined deletion line
         line = "-old_line1old_line2"
-        remaining_diff = [line]
 
-        result = self.fixer._try_resolve_deletion_mismatch(
-            line, remaining_diff, original_lines, 0
-        )
+        result = self.fixer._try_resolve_deletion_mismatch(line, original_lines, 0)
 
         if result["resolved"]:
             # Should split into two deletion lines
@@ -582,13 +579,13 @@ line_below"""
                 except_line = line
 
         # Verify the whitespace is preserved correctly
-        assert closing_paren_line == "         )", (
-            f"Expected '         )' but got {repr(closing_paren_line)}"
-        )
+        assert (
+            closing_paren_line == "         )"
+        ), f"Expected '         )' but got {repr(closing_paren_line)}"
         assert empty_line == " ", f"Expected ' ' but got {repr(empty_line)}"
-        assert except_line == "     except Exception as e:", (
-            f"Expected '     except Exception as e:' but got {repr(except_line)}"
-        )
+        assert (
+            except_line == "     except Exception as e:"
+        ), f"Expected '     except Exception as e:' but got {repr(except_line)}"
 
         print("✓ Split parts preserve whitespace correctly with proper diff prefixes")
 
@@ -615,12 +612,12 @@ line_below"""
         result = self.fixer.fix_diff(diff_content, original_content, "test.js")
 
         # The header should be corrected to show the right line counts
-        assert "@@ -1,5 +1,5 @@" in result, (
-            f"Expected corrected header '@@ -1,5 +1,5 @@' not found in result:\n{result}"
-        )
-        assert "@@ -1,6 +1,6 @@" not in result, (
-            f"Old incorrect header '@@ -1,6 +1,6 @@' should be removed from result:\n{result}"
-        )
+        assert (
+            "@@ -1,5 +1,5 @@" in result
+        ), f"Expected corrected header '@@ -1,5 +1,5 @@' not found in result:\n{result}"
+        assert (
+            "@@ -1,6 +1,6 @@" not in result
+        ), f"Old incorrect header '@@ -1,6 +1,6 @@' should be removed from result:\n{result}"
 
         print("✓ Hunk header with incorrect line counts corrected successfully")
 
@@ -673,16 +670,14 @@ import requests"""
         assert typing_line_idx is not None, f"Typing import line not found in: {lines}"
         assert addition_line_idx is not None, f"Addition line not found in: {lines}"
         assert empty_line_idx is not None, f"Empty context line not found in: {lines}"
-        assert fy_signin_line_idx is not None, (
-            f"fy_signin import line not found in: {lines}"
-        )
+        assert (
+            fy_signin_line_idx is not None
+        ), f"fy_signin import line not found in: {lines}"
 
         # Verify the order: typing < addition < empty < fy_signin
         assert (
             typing_line_idx < addition_line_idx < empty_line_idx < fy_signin_line_idx
-        ), (
-            f"Lines not in correct order: typing={typing_line_idx}, addition={addition_line_idx}, empty={empty_line_idx}, fy_signin={fy_signin_line_idx}"
-        )
+        ), f"Lines not in correct order: typing={typing_line_idx}, addition={addition_line_idx}, empty={empty_line_idx}, fy_signin={fy_signin_line_idx}"
 
         print("✓ Missing empty context line correctly inserted")
 
@@ -704,9 +699,9 @@ import requests"""
         result = self.fixer.fix_diff(diff_content, original_content, "test.txt")
 
         # Should include the "No newline at end of file" marker because the last line appears in diff context
-        assert "\\ No newline at end of file" in result, (
-            f"Should have newline marker when last line is in diff context: {repr(result)}"
-        )
+        assert (
+            "\\ No newline at end of file" in result
+        ), f"Should have newline marker when last line is in diff context: {repr(result)}"
 
         # Test case 2: Modifying the actual last line - should get the marker
         diff_content_last_line = """--- a/test.txt
@@ -721,9 +716,9 @@ import requests"""
         )
 
         # Should include the "No newline at end of file" marker because we ARE modifying the last line
-        assert "\\ No newline at end of file" in result_last_line, (
-            f"Expected newline marker when modifying last line: {repr(result_last_line)}"
-        )
+        assert (
+            "\\ No newline at end of file" in result_last_line
+        ), f"Expected newline marker when modifying last line: {repr(result_last_line)}"
 
         print("✓ No newline marker correctly applied only when last line is modified")
 
@@ -744,14 +739,14 @@ import requests"""
         result = self.fixer.fix_diff(diff_content, original_content, "test.txt")
 
         # Should NOT include the "No newline at end of file" marker
-        assert "\\ No newline at end of file" not in result, (
-            f"Should not have newline marker: {repr(result)}"
-        )
+        assert (
+            "\\ No newline at end of file" not in result
+        ), f"Should not have newline marker: {repr(result)}"
 
         # Should still end with newline for proper git format
-        assert result.endswith("\n"), (
-            f"Result should end with newline: {repr(result[-20:])}"
-        )
+        assert result.endswith(
+            "\n"
+        ), f"Result should end with newline: {repr(result[-20:])}"
 
         print("✓ No newline marker correctly omitted for files with trailing newlines")
 
@@ -795,28 +790,28 @@ import requests"""
 
         # Should detect multiple hunks and process separately
         hunk_count = result.count("@@") // 2
-        assert hunk_count == 2, (
-            f"Expected 2 hunks but got {hunk_count} in result: {repr(result)}"
-        )
+        assert (
+            hunk_count == 2
+        ), f"Expected 2 hunks but got {hunk_count} in result: {repr(result)}"
 
         # Should have single set of file headers
-        assert result.count("--- a/calculator.py") == 1, (
-            f"Should have single file header: {repr(result)}"
-        )
-        assert result.count("+++ b/calculator.py") == 1, (
-            f"Should have single file header: {repr(result)}"
-        )
+        assert (
+            result.count("--- a/calculator.py") == 1
+        ), f"Should have single file header: {repr(result)}"
+        assert (
+            result.count("+++ b/calculator.py") == 1
+        ), f"Should have single file header: {repr(result)}"
 
         # Should contain both changes
-        assert "+        self.history = []" in result, (
-            f"First hunk change missing: {repr(result)}"
-        )
-        assert "+        if y == 0:" in result, (
-            f"Second hunk change missing: {repr(result)}"
-        )
-        assert '+            raise ValueError("Cannot divide by zero")' in result, (
-            f"Second hunk change missing: {repr(result)}"
-        )
+        assert (
+            "+        self.history = []" in result
+        ), f"First hunk change missing: {repr(result)}"
+        assert (
+            "+        if y == 0:" in result
+        ), f"Second hunk change missing: {repr(result)}"
+        assert (
+            '+            raise ValueError("Cannot divide by zero")' in result
+        ), f"Second hunk change missing: {repr(result)}"
 
         print("✓ Multiple hunks correctly processed with proper structure")
 
@@ -883,9 +878,9 @@ import requests"""
         result = DiffConfig.create_fallback_header(content_lines)
 
         # Should count: 2 context + 1 deletion = 3 old, 2 context + 1 addition = 3 new
-        assert result == "@@ -1,3 +1,3 @@", (
-            f"Expected '@@ -1,3 +1,3 @@' but got '{result}'"
-        )
+        assert (
+            result == "@@ -1,3 +1,3 @@"
+        ), f"Expected '@@ -1,3 +1,3 @@' but got '{result}'"
         print("✓ Generic fallback header correctly calculated from content")
 
     def test_generic_fallback_with_empty_content(self):
@@ -895,9 +890,9 @@ import requests"""
         result = DiffConfig.create_fallback_header([])
 
         # Should default to minimum 1,1
-        assert result == "@@ -1,1 +1,1 @@", (
-            f"Expected '@@ -1,1 +1,1 @@' but got '{result}'"
-        )
+        assert (
+            result == "@@ -1,1 +1,1 @@"
+        ), f"Expected '@@ -1,1 +1,1 @@' but got '{result}'"
         print("✓ Generic fallback with empty content defaults to minimal header")
 
     def test_generic_fallback_with_custom_start_line(self):
@@ -908,9 +903,9 @@ import requests"""
         result = DiffConfig.create_fallback_header(content_lines, start_line=5)
 
         # Should start at line 5: 0 context + 0 deletion = 1 min old, 0 context + 2 addition = 2 new
-        assert result == "@@ -5,1 +5,2 @@", (
-            f"Expected '@@ -5,1 +5,2 @@' but got '{result}'"
-        )
+        assert (
+            result == "@@ -5,1 +5,2 @@"
+        ), f"Expected '@@ -5,1 +5,2 @@' but got '{result}'"
         print("✓ Generic fallback with custom start line works correctly")
 
     def test_no_hardcoded_fallbacks_used(self):
@@ -926,15 +921,15 @@ import requests"""
         result = self.fixer.fix_diff(diff_content, original_content, "test.py")
 
         # Should NOT contain the old hardcoded fallbacks
-        assert "@@ -1,10 +1,11 @@" not in result, (
-            "Old hardcoded fallback found in result"
-        )
+        assert (
+            "@@ -1,10 +1,11 @@" not in result
+        ), "Old hardcoded fallback found in result"
         assert "@@ -1,5 +1,5 @@" not in result, "Old hardcoded fallback found in result"
 
         # Should contain a sensible generic fallback
-        assert "@@ -1,1 +1,1 @@" in result, (
-            f"Expected generic fallback not found in: {result}"
-        )
+        assert (
+            "@@ -1,1 +1,1 @@" in result
+        ), f"Expected generic fallback not found in: {result}"
         print("✓ No hardcoded fallbacks used - generic solution working")
 
     def test_no_newline_marker_only_when_last_line_touched(self):
@@ -967,9 +962,9 @@ import urllib3"""
         result = self.fixer.fix_diff(diff_content, original_content, "original.py")
 
         # Should NOT contain the newline marker because the last line is not in diff context
-        assert "\\ No newline at end of file" not in result, (
-            "No newline marker should not be added when last line is not in diff context"
-        )
+        assert (
+            "\\ No newline at end of file" not in result
+        ), "No newline marker should not be added when last line is not in diff context"
 
         # Test case 2: Diff that includes the last line in context (like line_removal)
         diff_content_with_context = """--- a/original.py
@@ -997,9 +992,9 @@ def main():
         )
 
         # Should contain the newline marker because the last line appears in the diff context
-        assert "\\ No newline at end of file" in result_with_context, (
-            "No newline marker should be added when last line is in diff context"
-        )
+        assert (
+            "\\ No newline at end of file" in result_with_context
+        ), "No newline marker should be added when last line is in diff context"
 
         # Test case 3: Diff that DOES modify the last line directly
         diff_content_modifying_last = """--- a/original.py
@@ -1016,9 +1011,9 @@ def main():
         )
 
         # Should contain the newline marker because we ARE modifying the last line
-        assert "\\ No newline at end of file" in result_modifying, (
-            "No newline marker should be added when last line is modified"
-        )
+        assert (
+            "\\ No newline at end of file" in result_modifying
+        ), "No newline marker should be added when last line is modified"
 
 
 class TestUnifiedHunkClasses:
@@ -1232,9 +1227,7 @@ class TestCommonLogicExtraction:
         ]
         original_content = "old line\n"
 
-        result = self.fixer._apply_common_post_processing(
-            lines, original_content
-        )
+        result = self.fixer._apply_common_post_processing(lines, original_content)
 
         # Should have processed the lines (exact details depend on context, but should not error)
         assert isinstance(result, list)
@@ -1255,9 +1248,7 @@ class TestCommonLogicExtraction:
         ]
         original_content = "old line 1\ncontext\nold line 3\n"
 
-        result = self.fixer._apply_common_post_processing(
-            lines, original_content
-        )
+        result = self.fixer._apply_common_post_processing(lines, original_content)
 
         # Should process without adding single-hunk specific context
         assert isinstance(result, list)
@@ -1277,9 +1268,7 @@ class TestCommonLogicExtraction:
         # Original file without trailing newline
         original_content = "line 1\nlast_line"  # No \n at end
 
-        result = self.fixer._apply_common_post_processing(
-            lines, original_content
-        )
+        result = self.fixer._apply_common_post_processing(lines, original_content)
         result_str = "\n".join(result)
 
         # Should add no-newline markers when touching the last line
@@ -1519,12 +1508,12 @@ fi
         assert fi_line_idx + 1 < len(lines), "Missing line after fi"
         assert fi_line_idx + 2 < len(lines), "Missing second line after fi"
 
-        assert lines[fi_line_idx + 1] == "+", (
-            f"Expected empty addition after fi, got: {repr(lines[fi_line_idx + 1])}"
-        )
-        assert lines[fi_line_idx + 2] == "+# New line", (
-            f"Expected content addition, got: {repr(lines[fi_line_idx + 2])}"
-        )
+        assert (
+            lines[fi_line_idx + 1] == "+"
+        ), f"Expected empty addition after fi, got: {repr(lines[fi_line_idx + 1])}"
+        assert (
+            lines[fi_line_idx + 2] == "+# New line"
+        ), f"Expected content addition, got: {repr(lines[fi_line_idx + 2])}"
 
     def test_joined_return_statement_no_newline_pattern(self):
         """Test the joined_return_statement fixture pattern: proper handling of no newline markers."""
@@ -1585,12 +1574,12 @@ fi
         assert deletion_line_idx + 1 < len(lines), "Missing line after deletion"
         assert addition_line_idx + 1 < len(lines), "Missing line after addition"
 
-        assert lines[deletion_line_idx + 1].strip() == "\\ No newline at end of file", (
-            f"Expected no-newline marker after deletion, got: {repr(lines[deletion_line_idx + 1])}"
-        )
-        assert lines[addition_line_idx + 1].strip() == "\\ No newline at end of file", (
-            f"Expected no-newline marker after addition, got: {repr(lines[addition_line_idx + 1])}"
-        )
+        assert (
+            lines[deletion_line_idx + 1].strip() == "\\ No newline at end of file"
+        ), f"Expected no-newline marker after deletion, got: {repr(lines[deletion_line_idx + 1])}"
+        assert (
+            lines[addition_line_idx + 1].strip() == "\\ No newline at end of file"
+        ), f"Expected no-newline marker after addition, got: {repr(lines[addition_line_idx + 1])}"
 
     def test_hunk_header_real_case_pattern(self):
         """Test the hunk_header_real_case fixture pattern: fix malformed headers and joined lines in multi-hunk diffs."""
@@ -1734,12 +1723,12 @@ last_line = "old_value\""""
                 ):
                     addition_marker_found = True
 
-        assert deletion_marker_found, (
-            "Deletion of last line should have no-newline marker"
-        )
-        assert addition_marker_found, (
-            "Addition of last line should have no-newline marker"
-        )
+        assert (
+            deletion_marker_found
+        ), "Deletion of last line should have no-newline marker"
+        assert (
+            addition_marker_found
+        ), "Addition of last line should have no-newline marker"
 
     def test_missing_leading_space_and_line_break_pattern(self):
         """Test the missing_leading_space_and_line_break fixture pattern: fix missing prefixes and avoid incorrect no-newline markers."""
@@ -1785,17 +1774,15 @@ def test_func_three():
                 func_def_found = True
                 break
 
-        assert func_def_found, (
-            "Function definition should have space prefix (context line)"
-        )
+        assert (
+            func_def_found
+        ), "Function definition should have space prefix (context line)"
 
         # Verify that no-newline marker is NOT added since diff doesn't modify last line
         has_no_newline_marker = any(
             "\\ No newline at end of file" in line for line in lines
         )
-        assert not has_no_newline_marker, (
-            "No-newline marker should not be added when diff doesn't modify last line of file"
-        )
+        assert not has_no_newline_marker, "No-newline marker should not be added when diff doesn't modify last line of file"
 
     def test_diff_line_only_whitespace_pattern(self):
         """Test the diff_line_only_whitespace fixture pattern: correct whitespace-only context lines to match original file."""
@@ -1849,14 +1836,14 @@ return Utils
 
         # The next line should be " " (space prefix + empty line), not "      " (6 spaces)
         whitespace_line = lines[end_line_idx + 1]
-        assert whitespace_line == " ", (
-            f"Expected empty context line ' ' but got {repr(whitespace_line)}"
-        )
+        assert (
+            whitespace_line == " "
+        ), f"Expected empty context line ' ' but got {repr(whitespace_line)}"
 
         # Verify the line doesn't contain multiple spaces (the original bug)
-        assert "      " not in fixed_diff, (
-            f"Fixed diff should not contain 6-space line, found in: {repr(fixed_diff)}"
-        )
+        assert (
+            "      " not in fixed_diff
+        ), f"Fixed diff should not contain 6-space line, found in: {repr(fixed_diff)}"
 
         print(
             "✓ Whitespace-only context lines correctly match original file empty lines"
@@ -1933,21 +1920,21 @@ def update_function(param: Type):
         original_hunk_count = diff_content.count("@@") // 2
         result_hunk_count = result.count("@@") // 2
 
-        assert original_hunk_count == 3, (
-            f"Original should have 3 hunks, got {original_hunk_count}"
-        )
-        assert result_hunk_count <= original_hunk_count, (
-            f"Result should have <= hunks than original, got {result_hunk_count} vs {original_hunk_count}"
-        )
+        assert (
+            original_hunk_count == 3
+        ), f"Original should have 3 hunks, got {original_hunk_count}"
+        assert (
+            result_hunk_count <= original_hunk_count
+        ), f"Result should have <= hunks than original, got {result_hunk_count} vs {original_hunk_count}"
 
         # The result should be a valid diff structure
         lines = result.split("\n")
-        assert any(line.startswith("--- a/test.py") for line in lines), (
-            "Should have file header"
-        )
-        assert any(line.startswith("+++ b/test.py") for line in lines), (
-            "Should have file header"
-        )
+        assert any(
+            line.startswith("--- a/test.py") for line in lines
+        ), "Should have file header"
+        assert any(
+            line.startswith("+++ b/test.py") for line in lines
+        ), "Should have file header"
         assert any(line.startswith("@@") for line in lines), "Should have hunk headers"
 
         print("✓ Overlapping hunk detection and processing working correctly")
@@ -2014,12 +2001,12 @@ def update_function(param: Type):
         original_hunk_count = diff_content.count("@@") // 2
         result_hunk_count = result.count("@@") // 2
 
-        assert original_hunk_count == 3, (
-            f"Original should have 3 hunks, got {original_hunk_count}"
-        )
-        assert result_hunk_count == 2, (
-            f"Result should have 2 hunks after merging, got {result_hunk_count}"
-        )
+        assert (
+            original_hunk_count == 3
+        ), f"Original should have 3 hunks, got {original_hunk_count}"
+        assert (
+            result_hunk_count == 2
+        ), f"Result should have 2 hunks after merging, got {result_hunk_count}"
 
         # Check that empty lines are preserved in the merged hunk
         lines = result.split("\n")
@@ -2046,9 +2033,9 @@ def update_function(param: Type):
 
         # Check for required empty lines
         empty_line_count = sum(1 for line in merged_hunk_lines if line == " ")
-        assert empty_line_count >= 2, (
-            f"Expected at least 2 empty lines in merged hunk, got {empty_line_count}"
-        )
+        assert (
+            empty_line_count >= 2
+        ), f"Expected at least 2 empty lines in merged hunk, got {empty_line_count}"
 
         # Check for specific pattern: should have empty line after the param change
         # and empty line after the save_result call
@@ -2100,14 +2087,14 @@ def old_function():
         # The header should be @@ -2,4 +2,4 @@ because we have:
         # - 1 context line before + 2 deletion lines + 1 context line after = 4 old lines
         # - 1 context line before + 2 addition lines + 1 context line after = 4 new lines
-        assert any(line.startswith("@@ -2,4 +2,4 @@") for line in lines), (
-            f"Expected proper header, got: {lines}"
-        )
+        assert any(
+            line.startswith("@@ -2,4 +2,4 @@") for line in lines
+        ), f"Expected proper header, got: {lines}"
 
         # Should have empty context line before deletions
-        assert any(line == " " for line in lines), (
-            f"Expected context line, got: {lines}"
-        )
+        assert any(
+            line == " " for line in lines
+        ), f"Expected context line, got: {lines}"
 
     def test_context_line_parametrizable(self):
         """Test that context line count is parametrizable."""
@@ -2136,9 +2123,9 @@ def old_function():
 
         # Should have 4 context lines total (2 before, 2 after) plus the changes
         context_lines = [line for line in lines if line.startswith(" ")]
-        assert len(context_lines) >= 2, (
-            f"Expected at least 2 context lines, got: {len(context_lines)}"
-        )
+        assert (
+            len(context_lines) >= 2
+        ), f"Expected at least 2 context lines, got: {len(context_lines)}"
 
     def test_context_line_multiple_hunks_2_fixture(self):
         """Test that multiple_hunks_2 fixture works correctly with context lines."""
@@ -2208,16 +2195,16 @@ def old_function():
         fixed_diff = self.fixer.fix_diff(diff_content, original_content, "test.py")
 
         # Should preserve the existing context lines and header
-        assert "@@ -2,3 +2,3 @@" in fixed_diff, (
-            f"Expected header preserved, got: {fixed_diff}"
-        )
+        assert (
+            "@@ -2,3 +2,3 @@" in fixed_diff
+        ), f"Expected header preserved, got: {fixed_diff}"
         # Should not add additional context beyond what's already there
         context_lines = [
             line for line in fixed_diff.split("\n") if line.startswith(" ")
         ]
-        assert len(context_lines) <= 2, (
-            f"Should not add extra context, got: {context_lines}"
-        )
+        assert (
+            len(context_lines) <= 2
+        ), f"Should not add extra context, got: {context_lines}"
 
 
 class TestPreserveFilenames:
