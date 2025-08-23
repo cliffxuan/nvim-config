@@ -546,9 +546,6 @@ class DiffFixer:
             processed_lines = self._add_context_lines_around_single_hunk(
                 processed_lines, original_content
             )
-        else:
-            # For multi-hunk, context lines are added per-hunk during processing
-            pass
 
         # Handle files without trailing newlines
         if original_content and not original_content.endswith("\n"):
@@ -2144,7 +2141,6 @@ class DiffFixer:
         context_lines = 0
         deletion_lines = 0
         addition_lines = 0
-        actual_start_line = anchor_line
 
         i = 0
         while i < len(diff_lines):
@@ -2264,7 +2260,7 @@ class DiffFixer:
         lines_spanned = final_orig_position - (anchor_line - 1)
 
         return {
-            "start_line": actual_start_line,
+            "start_line": anchor_line,
             "orig_count": context_lines + deletion_lines,
             "new_count": context_lines + addition_lines,
             # TODO: processed_lines should be used
