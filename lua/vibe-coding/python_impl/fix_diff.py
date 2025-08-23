@@ -536,16 +536,10 @@ class DiffFixer:
         return processed_lines
 
     def _apply_common_post_processing(
-        self, lines: list[str], original_content: str, is_single_hunk: bool = False
+        self, lines: list[str], original_content: str
     ) -> list[str]:
         """Apply common post-processing steps shared between single and multi-hunk processing."""
         processed_lines = lines
-
-        # Add context lines around hunks that have only additions/deletions
-        if is_single_hunk:
-            processed_lines = self._add_context_lines_around_single_hunk(
-                processed_lines, original_content
-            )
 
         # Handle files without trailing newlines
         if original_content and not original_content.endswith("\n"):
@@ -849,7 +843,7 @@ class DiffFixer:
 
         # Apply common post-processing steps
         result_parts = self._apply_common_post_processing(
-            result_parts, original_content, is_single_hunk=False
+            result_parts, original_content
         )
 
         result = "\n".join(result_parts)
@@ -1279,6 +1273,7 @@ class DiffFixer:
 
         # Post-process to add missing empty line additions before content additions
         # This handles cases like the missing_leading_whitespace fixture
+        fixed_lines = self._add_context_lines_around_hunk(fixed_lines, original_content)
         fixed_lines = self._add_missing_empty_line_additions(fixed_lines)
 
         # Recalculate hunk header after post-processing if needed
@@ -1287,9 +1282,7 @@ class DiffFixer:
         )
 
         # Apply common post-processing steps
-        fixed_lines = self._apply_common_post_processing(
-            fixed_lines, original_content, is_single_hunk=True
-        )
+        fixed_lines = self._apply_common_post_processing(fixed_lines, original_content)
 
         result = "\n".join(fixed_lines)
 

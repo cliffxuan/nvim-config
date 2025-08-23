@@ -1233,7 +1233,7 @@ class TestCommonLogicExtraction:
         original_content = "old line\n"
 
         result = self.fixer._apply_common_post_processing(
-            lines, original_content, is_single_hunk=True
+            lines, original_content
         )
 
         # Should have processed the lines (exact details depend on context, but should not error)
@@ -1256,7 +1256,7 @@ class TestCommonLogicExtraction:
         original_content = "old line 1\ncontext\nold line 3\n"
 
         result = self.fixer._apply_common_post_processing(
-            lines, original_content, is_single_hunk=False
+            lines, original_content
         )
 
         # Should process without adding single-hunk specific context
@@ -1278,7 +1278,7 @@ class TestCommonLogicExtraction:
         original_content = "line 1\nlast_line"  # No \n at end
 
         result = self.fixer._apply_common_post_processing(
-            lines, original_content, is_single_hunk=True
+            lines, original_content
         )
         result_str = "\n".join(result)
 
