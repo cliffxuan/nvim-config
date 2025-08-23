@@ -904,55 +904,6 @@ class DiffFixer:
 
         return additions - deletions
 
-    def _infer_hunk_range_from_malformed_header(
-        self, hunk_lines: list[str]
-    ) -> tuple[int, int] | None:
-        """Infer the line range for a hunk with malformed header by temporarily fixing it."""
-        # Find the header index
-        header_idx = None
-        for i, line in enumerate(hunk_lines):
-            if line.startswith("@@"):
-                header_idx = i
-                break
-
-        if header_idx is None:
-            return None
-
-        # Create a temporary context to infer the header
-        # We need original_lines but we don't have the full original content here
-        # So we'll try to extract from the diff content available
-
-        # This is a simplified approach - we'll look for anchor lines in the hunk
-        # and make reasonable range estimates
-        content_lines = hunk_lines[header_idx + 1 :]  # Lines after header
-
-        # Look for deletion or context lines that can anchor our position
-        anchor_line = None
-        for line in content_lines[:10]:  # Check first 10 lines
-            if line.startswith("-") and line.strip():
-                # This is a line being deleted - it gives us a reference point
-                # For multiple_hunks_2, we know it should start around line 80 or 190
-                line_content = line[1:]  # Remove prefix
-
-                # Simple heuristic: if it contains "def create_", it's probably around line 80
-                # if it contains "if args.share_type", it's probably around line 190
-                if "def create_" in line_content:
-                    anchor_line = 80
-                    break
-                elif "args.share_type" in line_content:
-                    anchor_line = 190
-                    break
-
-        if anchor_line is None:
-            return None
-
-        # Estimate range based on content
-        deletions = sum(1 for line in content_lines if line.startswith("-"))
-        if deletions == 0:
-            deletions = 1
-
-        return (anchor_line, anchor_line + deletions - 1)
-
     def _diff_touches_last_line(
         self, diff_lines: list[str], original_content: str
     ) -> bool:
@@ -2064,8 +2015,9 @@ class DiffFixer:
         result = find_hunk_location(
             "\n".join(context.lines), "\n".join(context.original_lines)
         )
-        if result and result[2] > 0.9:
+        if result and result[2] > 0.8:
             return self._calculate_hunk_header_from_anchor(context, result[0] + 1)
+        # TODO avoid doing stuff below
         for i in range(context.line_index + 1, len(context.lines)):
             line = context.lines[i]
 
@@ -2143,58 +2095,380 @@ class DiffFixer:
     def _calculate_hunk_header_from_anchor(
         self, context: DiffContext, anchor_line: int
     ) -> str:
-        """Calculate hunk header using an anchor line number and actual diff content."""
-        # Pre-process lines to handle joined lines before counting
-        processed_lines = []
+        """Calculate hunk header using line-by-line reconciliation from anchor point.
+
+        Enhanced to start from anchor_line and reconcile context.original_lines
+        with the diff lines for more effective joined line detection.
+        """
+        # Extract diff content lines (everything after header until next hunk or end)
+        diff_lines = []
         for i in range(context.line_index + 1, len(context.lines)):
             line = context.lines[i]
-
-            # Stop processing if we hit another hunk header (for multi-hunk scenarios)
-            if line.startswith("@@"):
+            # Stop if we hit another hunk header or file header
+            if line.startswith(("@@", "---", "+++")):
                 break
+            diff_lines.append(line)
 
-            # Apply joined line splitting for more accurate counting
-            if self._is_joined_line_in_context(line, context):
-                # Temporarily set context line index for splitting
-                temp_context = DiffContext(
-                    lines=context.lines,
-                    original_lines=context.original_lines,
-                    line_index=i,
-                    preserve_filenames=context.preserve_filenames,
-                )
-                split_result = self._split_joined_line_with_context(line, temp_context)
-                processed_lines.extend(split_result)
-            else:
-                processed_lines.append(line)
+        if not diff_lines:
+            return f"@@ -{anchor_line},1 +{anchor_line},1 @@"
 
-        # Count context, deletion, and addition lines in the processed hunk
-        context_lines = 0
-        deletion_lines = 0
-        addition_lines = 0
+        # Perform line-by-line reconciliation starting from anchor_line
+        reconciliation_result = self._reconcile_lines_from_anchor(
+            anchor_line, diff_lines, context.original_lines
+        )
 
-        for line in processed_lines:
-            if line.startswith(" "):
-                context_lines += 1
-            elif line.startswith("-"):
-                deletion_lines += 1
-            elif line.startswith("+"):
-                addition_lines += 1
-            elif not line.strip():  # Empty line - count as context
-                context_lines += 1
-            else:
-                # No prefix - treat as context line
-                context_lines += 1
-
-        # Original section: context + deletions
-        orig_count = context_lines + deletion_lines
-        # New section: context + additions
-        new_count = context_lines + addition_lines
+        # Extract counts from reconciliation
+        start_line = reconciliation_result["start_line"]
+        orig_count = reconciliation_result["orig_count"]
+        new_count = reconciliation_result["new_count"]
 
         # Ensure minimum counts of 1
         orig_count = max(1, orig_count)
         new_count = max(1, new_count)
 
-        return f"@@ -{anchor_line},{orig_count} +{anchor_line},{new_count} @@"
+        return f"@@ -{start_line},{orig_count} +{start_line},{new_count} @@"
+
+    def _reconcile_lines_from_anchor(
+        self, anchor_line: int, diff_lines: list[str], original_lines: list[str]
+    ) -> dict:
+        """Reconcile diff lines with original lines starting from anchor point.
+
+        This method performs line-by-line matching to detect joined lines more effectively
+        by comparing diff content with the original file structure.
+
+        Returns:
+            dict: Contains 'start_line', 'orig_count', 'new_count', 'processed_lines'
+        """
+        processed_lines = []
+        orig_position = anchor_line - 1  # Convert to 0-based index
+        context_lines = 0
+        deletion_lines = 0
+        addition_lines = 0
+        actual_start_line = anchor_line
+
+        i = 0
+        while i < len(diff_lines):
+            line = diff_lines[i]
+
+            # Handle different line types
+            if line.startswith(" "):
+                # Context line - should match original
+                content = line[1:]
+                if (
+                    orig_position < len(original_lines)
+                    and original_lines[orig_position] == content
+                ):
+                    # Direct match - advance both positions
+                    processed_lines.append(line)
+                    context_lines += 1
+                    orig_position += 1
+                else:
+                    # No direct match - might be joined line or misaligned
+                    join_result = self._try_resolve_context_mismatch(
+                        line, original_lines, orig_position
+                    )
+                    if join_result["resolved"]:
+                        processed_lines.extend(join_result["lines"])
+                        context_lines += join_result["context_count"]
+                        deletion_lines += join_result["deletion_count"]
+                        addition_lines += join_result["addition_count"]
+                        orig_position += join_result["orig_advance"]
+                        i += (
+                            join_result["diff_advance"] - 1
+                        )  # -1 because loop will increment
+                    else:
+                        # Treat as regular context line
+                        processed_lines.append(line)
+                        context_lines += 1
+                        orig_position += 1
+
+            elif line.startswith("-"):
+                # Deletion line - should match original at current position
+                content = line[1:]
+                if (
+                    orig_position < len(original_lines)
+                    and original_lines[orig_position] == content
+                ):
+                    # Direct match - advance original position
+                    processed_lines.append(line)
+                    deletion_lines += 1
+                    orig_position += 1
+                else:
+                    # Check for joined deletion line
+                    join_result = self._try_resolve_deletion_mismatch(
+                        line, diff_lines[i:], original_lines, orig_position
+                    )
+                    if join_result["resolved"]:
+                        processed_lines.extend(join_result["lines"])
+                        context_lines += join_result["context_count"]
+                        deletion_lines += join_result["deletion_count"]
+                        addition_lines += join_result["addition_count"]
+                        orig_position += join_result["orig_advance"]
+                        i += join_result["diff_advance"] - 1
+                    else:
+                        # Keep as-is, don't advance original position (might be out of sync)
+                        processed_lines.append(line)
+                        deletion_lines += 1
+
+            elif line.startswith("+"):
+                # Addition line - doesn't consume original lines
+                processed_lines.append(line)
+                addition_lines += 1
+
+            elif not line.strip():
+                # Empty line - treat as context
+                if (
+                    orig_position < len(original_lines)
+                    and not original_lines[orig_position].strip()
+                ):
+                    # Matches empty line in original
+                    processed_lines.append(" " + line)
+                    context_lines += 1
+                    orig_position += 1
+                else:
+                    # No matching empty line - treat as addition
+                    processed_lines.append("+" + line)
+                    addition_lines += 1
+
+            else:
+                # Line without prefix - determine appropriate prefix
+                if (
+                    orig_position < len(original_lines)
+                    and original_lines[orig_position] == line
+                ):
+                    # Matches original - context line
+                    processed_lines.append(" " + line)
+                    context_lines += 1
+                    orig_position += 1
+                else:
+                    # Check for joined line pattern
+                    join_result = self._try_resolve_unprefixed_mismatch(
+                        line, original_lines, orig_position
+                    )
+                    if join_result["resolved"]:
+                        processed_lines.extend(join_result["lines"])
+                        context_lines += join_result["context_count"]
+                        deletion_lines += join_result["deletion_count"]
+                        addition_lines += join_result["addition_count"]
+                        orig_position += join_result["orig_advance"]
+                        i += join_result["diff_advance"] - 1
+                    else:
+                        # Default to addition
+                        processed_lines.append("+" + line)
+                        addition_lines += 1
+
+            i += 1
+
+        # Calculate final position span
+        final_orig_position = orig_position
+        lines_spanned = final_orig_position - (anchor_line - 1)
+
+        return {
+            "start_line": actual_start_line,
+            "orig_count": context_lines + deletion_lines,
+            "new_count": context_lines + addition_lines,
+            # TODO: processed_lines should be used
+            "processed_lines": processed_lines,
+            "lines_spanned": lines_spanned,
+        }
+
+    def _try_resolve_context_mismatch(
+        self,
+        line: str,
+        original_lines: list[str],
+        orig_pos: int,
+    ) -> dict:
+        """Try to resolve context line mismatch by checking for joined lines."""
+        content = line[1:]  # Remove space prefix
+
+        # Try to split the line and match parts to consecutive original lines
+        potential_splits = self._get_line_splits_for_reconciliation(
+            content, original_lines, orig_pos
+        )
+
+        for split_info in potential_splits:
+            if self._validate_split_against_original(
+                split_info, original_lines, orig_pos
+            ):
+                # Found valid split
+                split_lines = []
+                for part in split_info["parts"]:
+                    if part.strip():  # Non-empty parts
+                        split_lines.append(" " + part)
+                    else:  # Empty parts
+                        split_lines.append(" ")
+
+                return {
+                    "resolved": True,
+                    "lines": split_lines,
+                    "context_count": len(split_lines),
+                    "deletion_count": 0,
+                    "addition_count": 0,
+                    "orig_advance": len(split_lines),
+                    "diff_advance": 1,
+                }
+
+        return {"resolved": False}
+
+    def _try_resolve_deletion_mismatch(
+        self,
+        line: str,
+        remaining_diff: list[str],
+        original_lines: list[str],
+        orig_pos: int,
+    ) -> dict:
+        """Try to resolve deletion line mismatch by checking for joined lines."""
+        content = line[1:]  # Remove - prefix
+
+        # Try to split the line and match parts to consecutive original lines
+        potential_splits = self._get_line_splits_for_reconciliation(
+            content, original_lines, orig_pos
+        )
+
+        for split_info in potential_splits:
+            if self._validate_split_against_original(
+                split_info, original_lines, orig_pos
+            ):
+                # Found valid split - all parts are deletions
+                split_lines = []
+                for part in split_info["parts"]:
+                    split_lines.append("-" + part)
+
+                return {
+                    "resolved": True,
+                    "lines": split_lines,
+                    "context_count": 0,
+                    "deletion_count": len(split_lines),
+                    "addition_count": 0,
+                    "orig_advance": len(split_lines),
+                    "diff_advance": 1,
+                }
+
+        return {"resolved": False}
+
+    def _try_resolve_unprefixed_mismatch(
+        self,
+        line: str,
+        original_lines: list[str],
+        orig_pos: int,
+    ) -> dict:
+        """Try to resolve unprefixed line mismatch by checking for joined lines."""
+        # Try to split the line and match parts to consecutive original lines
+        potential_splits = self._get_line_splits_for_reconciliation(
+            line, original_lines, orig_pos
+        )
+
+        for split_info in potential_splits:
+            if self._validate_split_against_original(
+                split_info, original_lines, orig_pos
+            ):
+                # Found valid split - determine prefix for each part
+                split_lines = []
+                for i, part in enumerate(split_info["parts"]):
+                    expected_orig_pos = orig_pos + i
+                    if (
+                        expected_orig_pos < len(original_lines)
+                        and original_lines[expected_orig_pos] == part
+                    ):
+                        # Context line
+                        split_lines.append(" " + part)
+                    else:
+                        # Addition line
+                        split_lines.append("+" + part)
+
+                context_count = sum(1 for l in split_lines if l.startswith(" "))
+                addition_count = sum(1 for l in split_lines if l.startswith("+"))
+
+                return {
+                    "resolved": True,
+                    "lines": split_lines,
+                    "context_count": context_count,
+                    "deletion_count": 0,
+                    "addition_count": addition_count,
+                    "orig_advance": context_count,  # Only advance for context lines
+                    "diff_advance": 1,
+                }
+
+        return {"resolved": False}
+
+    @staticmethod
+    def _get_line_splits_for_reconciliation(
+        line: str, original_lines: list[str], start_pos: int
+    ) -> list[dict]:
+        """Get potential line splits for reconciliation with original lines.
+
+        Returns list of split info dicts with 'parts' and 'confidence' keys.
+        """
+        splits = []
+
+        if not line.strip():
+            return splits
+
+        # Look for splits where consecutive parts match consecutive original lines
+        line_len = len(line)
+
+        # Try different split points
+        for split_point in range(1, line_len):
+            left_part = line[:split_point].rstrip()
+            right_part = line[split_point:].lstrip()
+
+            if not left_part.strip() or not right_part.strip():
+                continue
+
+            # Check if left part matches original at start_pos
+            if (
+                start_pos < len(original_lines)
+                and original_lines[start_pos] == left_part
+            ):
+                # Check if right part matches original at start_pos + 1
+                if (
+                    start_pos + 1 < len(original_lines)
+                    and original_lines[start_pos + 1].strip() == right_part.strip()
+                ):
+                    splits.append({"parts": [left_part, right_part], "confidence": 0.9})
+
+                # Also try right part with additional splits
+                remaining = right_part
+                pos = start_pos + 1
+
+                # Try to split the right part further
+                for split_point2 in range(1, len(remaining)):
+                    next_part = remaining[:split_point2].rstrip()
+                    rest_part = remaining[split_point2:].lstrip()
+
+                    if (
+                        pos < len(original_lines)
+                        and original_lines[pos] == next_part
+                        and pos + 1 < len(original_lines)
+                        and original_lines[pos + 1] == rest_part
+                    ):
+                        splits.append(
+                            {
+                                "parts": [left_part, next_part, rest_part],
+                                "confidence": 0.8,
+                            }
+                        )
+                        break
+
+        # Sort by confidence
+        splits.sort(key=lambda x: x["confidence"], reverse=True)
+        return splits[:3]  # Return top 3 candidates
+
+    def _validate_split_against_original(
+        self, split_info: dict, original_lines: list[str], start_pos: int
+    ) -> bool:
+        """Validate that split parts match consecutive original lines."""
+        parts = split_info["parts"]
+
+        for i, part in enumerate(parts):
+            expected_pos = start_pos + i
+            if (
+                expected_pos >= len(original_lines)
+                or original_lines[expected_pos] != part
+            ):
+                return False
+
+        return True
 
     def _add_context_lines_around_hunk(
         self, hunk_lines: list[str], original_content: str

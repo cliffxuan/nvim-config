@@ -1,6 +1,6 @@
 --- a/original.py
 +++ b/original.py
-@@ -5,5 +5,5 @@
+@@ -4,5 +4,5 @@
 
 -    all_mixtures = []
 +    all_mixture_names = []

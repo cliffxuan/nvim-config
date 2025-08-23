@@ -59,6 +59,7 @@ def generate_expected_files(filter_name=None):
     generated_count = 0
     failed_count = 0
     skipped_count = 0
+    failed_fixtures = []
 
     print("Generating expected files by applying diff_formatted to original files...")
     if filter_name:
@@ -98,6 +99,7 @@ def generate_expected_files(filter_name=None):
             if not source_filename or not target_filename:
                 print(f"✗ Failed to extract filenames from {item.name}")
                 failed_count += 1
+                failed_fixtures.append(item.name)
                 continue
 
             # Use a temporary directory for applying the diff
@@ -156,19 +158,24 @@ def generate_expected_files(filter_name=None):
                     else:
                         print(f"✗ Result file not found for {item.name}")
                         failed_count += 1
+                        failed_fixtures.append(item.name)
                 else:
                     print(
                         f"✗ Failed to apply diff for {item.name}: {result.stderr.strip()}"
                     )
                     failed_count += 1
+                    failed_fixtures.append(item.name)
 
         except Exception as e:
             print(f"✗ Error processing {item.name}: {e}")
             failed_count += 1
+            failed_fixtures.append(item.name)
 
     print("\nExpected files generation summary:")
     print(f"  Generated: {generated_count} expected files")
     print(f"  Failed: {failed_count} fixtures")
+    if failed_fixtures:
+        print(f"  Failed fixtures: {', '.join(failed_fixtures)}")
     print(f"  Skipped: {skipped_count} fixtures")
 
     return generated_count, failed_count, skipped_count
@@ -179,6 +186,7 @@ def process_fixtures(preserve_filenames=False, filter_name=None):
     current_dir = PWD
     processed_count = 0
     failed_count = 0
+    failed_fixtures = []
 
     print("Processing fixture diffs to create diff_formatted files...")
     if filter_name:
@@ -228,13 +236,17 @@ def process_fixtures(preserve_filenames=False, filter_name=None):
             except subprocess.CalledProcessError as e:
                 print(f"✗ Failed to process {item.name}: {e.stderr.strip()}")
                 failed_count += 1
+                failed_fixtures.append(item.name)
             except Exception as e:
                 print(f"✗ Error processing {item.name}: {e}")
                 failed_count += 1
+                failed_fixtures.append(item.name)
 
     print("\nDiff processing summary:")
     print(f"  Processed: {processed_count} fixtures")
     print(f"  Failed: {failed_count} fixtures")
+    if failed_fixtures:
+        print(f"  Failed fixtures: {', '.join(failed_fixtures)}")
 
     return processed_count, failed_count
 

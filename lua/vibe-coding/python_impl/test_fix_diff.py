@@ -98,6 +98,168 @@ class TestDiffFixer:
         assert "HIGH:" in result
         assert "LOW:" not in result
 
+    def test_calculate_hunk_header_from_anchor_basic(self):
+        """Test basic functionality of enhanced _calculate_hunk_header_from_anchor."""
+        original_lines = [
+            "def function():",
+            "    return True",
+            "",
+            "def other():",
+            "    pass",
+        ]
+
+        diff_lines = [
+            " def function():",
+            "-    return True",
+            "+    return False",
+            " ",
+            " def other():",
+        ]
+
+        context = DiffContext(
+            lines=["@@"] + diff_lines,  # Add dummy header
+            original_lines=original_lines,
+            line_index=0,
+            preserve_filenames=False,
+        )
+
+        result = self.fixer._calculate_hunk_header_from_anchor(context, 1)
+        assert result == "@@ -1,4 +1,4 @@"
+
+    def test_reconcile_lines_from_anchor_simple(self):
+        """Test line-by-line reconciliation with simple diff."""
+        original_lines = ["line1", "line2", "line3"]
+
+        diff_lines = [" line1", "-line2", "+new_line2", " line3"]
+
+        result = self.fixer._reconcile_lines_from_anchor(1, diff_lines, original_lines)
+
+        assert result["start_line"] == 1
+        assert result["orig_count"] == 3  # 2 context + 1 deletion
+        assert result["new_count"] == 3  # 2 context + 1 addition
+
+    def test_reconcile_lines_with_joined_context(self):
+        """Test reconciliation with joined context lines."""
+        original_lines = ["import os", "import sys", "", "def main():"]
+
+        # Simulate joined line: "import osimport sys"
+        diff_lines = [
+            " import osimport sys",  # This should be split
+            " ",
+            " def main():",
+        ]
+
+        result = self.fixer._reconcile_lines_from_anchor(1, diff_lines, original_lines)
+
+        # Should handle joined line detection
+        assert result["orig_count"] >= 3
+        assert result["new_count"] >= 3
+
+    def test_try_resolve_context_mismatch(self):
+        """Test context mismatch resolution with joined lines."""
+        original_lines = ["if condition:", "    action()", "else:", "    other()"]
+
+        # Test joined line "if condition:    action()"
+        line = " if condition:    action()"
+
+        result = self.fixer._try_resolve_context_mismatch(line, original_lines, 0)
+
+        if result["resolved"]:
+            # Should split into two context lines
+            assert len(result["lines"]) == 2
+            assert all(l.startswith(" ") for l in result["lines"])
+            assert result["context_count"] == 2
+            assert result["orig_advance"] == 2
+
+    def test_try_resolve_deletion_mismatch(self):
+        """Test deletion mismatch resolution with joined lines."""
+        original_lines = ["old_line1", "old_line2", "keep_this"]
+
+        # Test joined deletion line
+        line = "-old_line1old_line2"
+        remaining_diff = [line]
+
+        result = self.fixer._try_resolve_deletion_mismatch(
+            line, remaining_diff, original_lines, 0
+        )
+
+        if result["resolved"]:
+            # Should split into two deletion lines
+            assert len(result["lines"]) == 2
+            assert all(l.startswith("-") for l in result["lines"])
+            assert result["deletion_count"] == 2
+            assert result["orig_advance"] == 2
+
+    def test_get_line_splits_for_reconciliation(self):
+        """Test line splitting for reconciliation."""
+        original_lines = ["first_part", "second_part", "third_part"]
+
+        # Test line that could be split
+        line = "first_partsecond_part"
+
+        splits = self.fixer._get_line_splits_for_reconciliation(line, original_lines, 0)
+
+        # Should find at least one valid split
+        assert len(splits) > 0
+
+        # Best split should have high confidence
+        if splits:
+            best_split = splits[0]
+            assert best_split["confidence"] > 0.8
+            assert len(best_split["parts"]) == 2
+            assert best_split["parts"][0] == "first_part"
+            assert best_split["parts"][1] == "second_part"
+
+    def test_validate_split_against_original(self):
+        """Test split validation against original lines."""
+        original_lines = ["part1", "part2", "part3"]
+
+        # Valid split
+        valid_split = {"parts": ["part1", "part2"], "confidence": 0.9}
+
+        assert self.fixer._validate_split_against_original(
+            valid_split, original_lines, 0
+        )
+
+        # Invalid split
+        invalid_split = {"parts": ["wrong1", "wrong2"], "confidence": 0.9}
+
+        assert not self.fixer._validate_split_against_original(
+            invalid_split, original_lines, 0
+        )
+
+    def test_joined_line_detection_integration(self):
+        """Integration test for joined line detection in hunk header calculation."""
+        original_content = """def func1():
+    return 1
+
+def func2():
+    return 2"""
+
+        # Diff with joined lines
+        diff_content = """--- a/test.py
++++ b/test.py
+@@ ... @@
+ def func1():    return 1
+ 
+ def func2():
++    print("added")
+     return 2"""
+
+        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+
+        # Should have proper hunk header and handle joined lines
+        lines = result.strip().split("\n")
+        hunk_header = None
+        for line in lines:
+            if line.startswith("@@"):
+                hunk_header = line
+                break
+
+        assert hunk_header is not None
+        # Should have reasonable line counts (not @@ ... @@)
+        assert "..." not in hunk_header
+
     def test_preserve_filenames_option(self):
         """Test filename preservation option."""
         diff_content = (
