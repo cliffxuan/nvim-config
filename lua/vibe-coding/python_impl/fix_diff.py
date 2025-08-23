@@ -854,17 +854,6 @@ class DiffFixer:
 
         result = "\n".join(result_parts)
 
-        # Check if original file ends with newline and add marker if not (fallback)
-        # Only add marker if the diff actually modifies the last line of the file
-        if (
-            original_content
-            and not original_content.endswith("\n")
-            and result
-            and not result.strip().endswith(DiffConfig.NO_NEWLINE_MARKER)
-            and self._diff_touches_last_line(result_parts, original_content)
-        ):
-            result += "\n\\ No newline at end of file"
-
         # Diff patches should always end with a newline for proper git format
         # unless the result is empty
         if result and not result.endswith("\n"):
@@ -995,6 +984,7 @@ class DiffFixer:
 
         return result
 
+    # TODO dedup _add_no_newline_marker_if_needed
     def _apply_no_newline_markers_to_last_line_changes(
         self, lines: list[str], original_content: str
     ) -> list[str]:
@@ -1236,9 +1226,7 @@ class DiffFixer:
 
             # Handle deletion lines
             if self._is_deletion_line(line):
-                processed_result = self._process_deletion_line(
-                    line, context, last_original_line_index
-                )
+                processed_result = self._process_deletion_line(line, context)
                 fixed_lines.append(processed_result["line"])
                 recently_processed_deletion = True
                 if processed_result["line_index"] is not None:
@@ -1357,9 +1345,7 @@ class DiffFixer:
         """Check if a line is a deletion line."""
         return line.startswith("-") and not line.startswith("---")
 
-    def _process_deletion_line(
-        self, line: str, context: DiffContext, last_original_line_index: int
-    ) -> dict:
+    def _process_deletion_line(self, line: str, context: DiffContext) -> dict:
         """Process a deletion line and return the processed line with metadata.
 
         Returns:
@@ -2012,7 +1998,7 @@ class DiffFixer:
         result = find_hunk_location(
             "\n".join(context.lines), "\n".join(context.original_lines)
         )
-        if result and result[2] > 0.8:
+        if result and result[2] > 0.825:  # TODO increase this as high as possible
             return self._calculate_hunk_header_from_anchor(context, result[0] + 1)
         # TODO avoid doing stuff below
         for i in range(context.line_index + 1, len(context.lines)):
@@ -2141,6 +2127,15 @@ class DiffFixer:
         context_lines = 0
         deletion_lines = 0
         addition_lines = 0
+
+        # missing empty lines in the diff
+        # TODO: modify processed_lines instead and use the result
+        while diff_lines[0] != original_lines[orig_position][1:]:
+            if original_lines[orig_position].strip() == "":
+                orig_position += 1
+            else:
+                break
+        anchor_line = orig_position + 1
 
         i = 0
         while i < len(diff_lines):

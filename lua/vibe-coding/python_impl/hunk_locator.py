@@ -140,7 +140,7 @@ def find_hunk_location(
 
     # If header has old_count, prefer that as window size (but clamp reasonably)
     if header.get("old_count"):
-        k = max(1, min(header["old_count"], n))
+        k = max(1, min(header["old_count"], n), k)
 
     candidates: list[tuple[int, int, float, str]] = []
 
@@ -173,13 +173,6 @@ def find_hunk_location(
 
     # Prefer higher score; break ties by choosing the one closer to hinted start if available
     best = max(candidates, key=lambda x: x[2])
-
-    # Optional: slight preference to "hint-band" over "global" when scores are equal
-    same_score = [c for c in candidates if abs(c[2] - best[2]) < 1e-9]
-    if len(same_score) > 1:
-        pref = [c for c in same_score if c[3] == "hint-band"]
-        if pref:
-            best = pref[0]
 
     start_idx, end_idx, score, label = best
     meta = {

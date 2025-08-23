@@ -5,7 +5,7 @@
  from loguru import logger
  
  from app.main import store
-@@ -5,6 +6,9 @@
+@@ -7,6 +8,9 @@
  def main():
 +    start_time = time.time()
 +    logger.info("Starting cache population")
@@ -15,7 +15,7 @@
          for mixture, data in get_mixtures("dailer").items():
              if data["state"].upper() != "LIVE":
                  logger.info(
-@@ -17,11 +21,13 @@
+@@ -14,11 +18,13 @@
                  )
                  continue
              try:
