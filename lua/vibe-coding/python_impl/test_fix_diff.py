@@ -34,7 +34,7 @@ class TestDiffFixer:
         diff_content = diff_path.read_text()
         original_content = original_path.read_text()
 
-        fixed_diff = self.fixer.fix_diff(
+        fixed_diff = self.fixer.run(
             diff_content, original_content, str(original_path)
         )
 
@@ -43,60 +43,6 @@ class TestDiffFixer:
         assert lines[0].startswith("--- a/")
         assert lines[1].startswith("+++ b/")
         assert any(line.startswith("@@") for line in lines)
-
-    def test_custom_rule_addition(self):
-        """Test that custom rules can be added and applied."""
-
-        # Create a custom rule for testing
-        def custom_matcher(line: str, context: DiffContext) -> bool:
-            return "CUSTOM_PATTERN" in line
-
-        def custom_fixer(line: str, context: DiffContext) -> list[str]:
-            return ["# Fixed: " + line]
-
-        custom_rule = DiffFixRule(
-            name="test_rule",
-            matcher=custom_matcher,
-            fixer=custom_fixer,
-            priority=20,  # High priority
-            applies_to="all",
-        )
-
-        self.fixer.add_rule(custom_rule)
-
-        # Test that the rule is applied
-        test_diff = "CUSTOM_PATTERN test line"
-        result = self.fixer.fix_diff(test_diff, "", "test.txt")
-
-        assert "# Fixed:" in result
-
-    def test_rule_priority_ordering(self):
-        """Test that rules are applied in priority order."""
-        # Add rules with different priorities
-        low_priority = DiffFixRule(
-            name="low",
-            matcher=lambda line, ctx: "TEST" in line,
-            fixer=lambda line, ctx: ["LOW: " + line],
-            priority=1,
-            applies_to="all",
-        )
-
-        high_priority = DiffFixRule(
-            name="high",
-            matcher=lambda line, ctx: "TEST" in line,
-            fixer=lambda line, ctx: ["HIGH: " + line],
-            priority=10,
-            applies_to="all",
-        )
-
-        self.fixer.add_rule(low_priority)
-        self.fixer.add_rule(high_priority)
-
-        result = self.fixer.fix_diff("TEST line", "", "test.txt")
-
-        # High priority rule should be applied first
-        assert "HIGH:" in result
-        assert "LOW:" not in result
 
     def test_calculate_hunk_header_from_anchor_basic(self):
         """Test basic functionality of enhanced _calculate_hunk_header_from_anchor."""
@@ -167,7 +113,7 @@ class TestDiffFixer:
         if result["resolved"]:
             # Should split into two context lines
             assert len(result["lines"]) == 2
-            assert all(l.startswith(" ") for l in result["lines"])
+            assert all(ln.startswith(" ") for ln in result["lines"])
             assert result["context_count"] == 2
             assert result["orig_advance"] == 2
 
@@ -183,7 +129,7 @@ class TestDiffFixer:
         if result["resolved"]:
             # Should split into two deletion lines
             assert len(result["lines"]) == 2
-            assert all(l.startswith("-") for l in result["lines"])
+            assert all(ln.startswith("-") for ln in result["lines"])
             assert result["deletion_count"] == 2
             assert result["orig_advance"] == 2
 
@@ -243,7 +189,7 @@ def func2():
 +    print("added")
      return 2"""
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+        result = self.fixer.run(diff_content, original_content, "test.py")
 
         # Should have proper hunk header and handle joined lines
         lines = result.strip().split("\n")
@@ -265,20 +211,20 @@ def func2():
         original_content = "old\n"
 
         # Test without preserve
-        result_no_preserve = self.fixer.fix_diff(
+        result_no_preserve = self.fixer.run(
             diff_content, original_content, "test.txt", False
         )
         assert "--- a/test.txt" in result_no_preserve
 
         # Test with preserve
-        result_preserve = self.fixer.fix_diff(
+        result_preserve = self.fixer.run(
             diff_content, original_content, "test.txt", True
         )
         assert "--- a/original/path.txt" in result_preserve
 
     def test_edge_case_empty_diff(self):
         """Test edge case: empty diff content."""
-        result = self.fixer.fix_diff("", "", "test.txt")
+        result = self.fixer.run("", "", "test.txt")
         assert result == "\n"
 
     def test_edge_case_malformed_hunk_header(self):
@@ -293,7 +239,7 @@ def func2():
             diff_content = (
                 f"--- a/test.txt\n+++ b/test.txt\n{malformed_header}\n test line"
             )
-            result = self.fixer.fix_diff(diff_content, "test line\n", "test.txt")
+            result = self.fixer.run(diff_content, "test line\n", "test.txt")
 
             # Should have a valid hunk header
             lines = result.split("\n")
@@ -310,7 +256,7 @@ def func2():
         # Original file has different indentation - strict matching should prevent split
         original_content = "        )\n    except Exception as e:\n"
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+        result = self.fixer.run(diff_content, original_content, "test.py")
 
         # With strict matching, the line should NOT be split due to indentation mismatch
         # Instead it should be treated as an addition (since it doesn't exist in original)
@@ -327,7 +273,7 @@ def func2():
         # Only 'existing line' exists in original, so 'new line' should get + prefix
         original_content = "existing line\n"
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.txt")
+        result = self.fixer.run(diff_content, original_content, "test.txt")
 
         lines = result.split("\n")
         # Should infer that 'existing line' is context (exists in original)
@@ -343,7 +289,7 @@ def func2():
         diff_content = "--- a/test.txt\n+++ b/test.txt\n@@ ... @@\n context line\n-old line\n+new line"
         original_content = "context line\nold line\n"
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.txt")
+        result = self.fixer.run(diff_content, original_content, "test.txt")
 
         # Should infer proper hunk header based on context
         lines = result.split("\n")
@@ -366,7 +312,7 @@ def func2():
         diff_content = diff_path.read_text()
         original_content = original_path.read_text()
 
-        fixed_diff = self.fixer.fix_diff(
+        fixed_diff = self.fixer.run(
             diff_content, original_content, str(original_path)
         )
 
@@ -406,17 +352,17 @@ def func2():
     def test_error_handling_robustness(self):
         """Test that the fixer handles various error conditions gracefully."""
         # Test with None/empty inputs
-        result = self.fixer.fix_diff("", "", "")
+        result = self.fixer.run("", "", "")
         assert isinstance(result, str)
 
         # Test with invalid diff format
         invalid_diff = "This is not a diff\nJust some random text"
-        result = self.fixer.fix_diff(invalid_diff, "original content", "test.txt")
+        result = self.fixer.run(invalid_diff, "original content", "test.txt")
         assert isinstance(result, str)
 
         # Test with mismatched content
         diff_with_missing_context = "--- a/test.txt\n+++ b/test.txt\n@@ -1,1 +1,1 @@\n-nonexistent line\n+new line"
-        result = self.fixer.fix_diff(
+        result = self.fixer.run(
             diff_with_missing_context, "actual content", "test.txt"
         )
         assert isinstance(result, str)
@@ -435,7 +381,7 @@ def func2():
     old_line
 """
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+        result = self.fixer.run(diff_content, original_content, "test.py")
 
         # Should correct the indentation of the deleted line to match original
         assert "-    old_line" in result  # Should be 4 spaces, not 2
@@ -457,7 +403,7 @@ line_above
 duplicate_line
 line_below"""
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+        result = self.fixer.run(diff_content, original_content, "test.py")
 
         # Should pick the right duplicate_line based on context (line_above)
         lines = result.split("\n")
@@ -492,7 +438,7 @@ line_below"""
     except Exception as e:
 """
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+        result = self.fixer.run(diff_content, original_content, "test.py")
 
         # Should be split into separate lines with correct indentation
         assert "        )" in result  # First part with 8 spaces
@@ -512,7 +458,7 @@ line_below"""
         original_content = """result = func():return value
 """
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+        result = self.fixer.run(diff_content, original_content, "test.py")
 
         # Should NOT split the line since it exists as-is in original
         assert "result = func():return value" in result
@@ -538,7 +484,7 @@ line_below"""
     print("hello")
 """
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+        result = self.fixer.run(diff_content, original_content, "test.py")
 
         # Should correct the indentation of the deleted line
         assert '-    print("hello")' in result  # Should be 4 spaces
@@ -557,7 +503,7 @@ line_below"""
             "        console.print()\n        )\n\n    except Exception as e:\n"
         )
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+        result = self.fixer.run(diff_content, original_content, "test.py")
         lines = result.strip().split("\n")
 
         # The joined line should be split into 3 parts with proper prefixes:
@@ -609,7 +555,7 @@ line_below"""
   timeout: 5000 // Default timeout value
 };"""
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.js")
+        result = self.fixer.run(diff_content, original_content, "test.js")
 
         # The header should be corrected to show the right line counts
         assert (
@@ -641,7 +587,7 @@ from typing import Any, Dict, List
 import fy_signin
 import requests"""
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+        result = self.fixer.run(diff_content, original_content, "test.py")
 
         # Should insert the missing empty line as context
         lines = result.strip().split("\n")
@@ -696,7 +642,7 @@ import requests"""
         # Original file without trailing newline
         original_content = "line 1\nline 2\nold content\nline 4"
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.txt")
+        result = self.fixer.run(diff_content, original_content, "test.txt")
 
         # Should include the "No newline at end of file" marker because the last line appears in diff context
         assert (
@@ -711,7 +657,7 @@ import requests"""
 -line 4
 +line 4 modified"""
 
-        result_last_line = self.fixer.fix_diff(
+        result_last_line = self.fixer.run(
             diff_content_last_line, original_content, "test.txt"
         )
 
@@ -736,7 +682,7 @@ import requests"""
         # Original file WITH trailing newline
         original_content = "line 1\nold content\nline 3\n"
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.txt")
+        result = self.fixer.run(diff_content, original_content, "test.txt")
 
         # Should NOT include the "No newline at end of file" marker
         assert (
@@ -786,7 +732,7 @@ import requests"""
     def divide(self, x, y):
         return x / y"""
 
-        result = self.fixer.fix_diff(diff_content, original_content, "calculator.py")
+        result = self.fixer.run(diff_content, original_content, "calculator.py")
 
         # Should detect multiple hunks and process separately
         hunk_count = result.count("@@") // 2
@@ -827,7 +773,7 @@ import requests"""
 
         original_content = "old line\ncontext line\n"
 
-        result = self.fixer.fix_diff(single_hunk_diff, original_content, "test.py")
+        result = self.fixer.run(single_hunk_diff, original_content, "test.py")
 
         # Should have proper diff structure
         assert "--- a/test.py" in result
@@ -850,7 +796,7 @@ import requests"""
 
         multi_original = "old line 1\ncontext line\nold line 2\ncontext line 2\n"
 
-        multi_result = self.fixer.fix_diff(multi_hunk_diff, multi_original, "test.py")
+        multi_result = self.fixer.run(multi_hunk_diff, multi_original, "test.py")
 
         # Should have proper multi-hunk structure
         assert "--- a/test.py" in multi_result
@@ -918,7 +864,7 @@ import requests"""
 
         original_content = ""
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+        result = self.fixer.run(diff_content, original_content, "test.py")
 
         # Should NOT contain the old hardcoded fallbacks
         assert (
@@ -959,7 +905,7 @@ import requests
 import typer
 import urllib3"""
 
-        result = self.fixer.fix_diff(diff_content, original_content, "original.py")
+        result = self.fixer.run(diff_content, original_content, "original.py")
 
         # Should NOT contain the newline marker because the last line is not in diff context
         assert (
@@ -987,7 +933,7 @@ import re
 def main():
     pass"""
 
-        result_with_context = self.fixer.fix_diff(
+        result_with_context = self.fixer.run(
             diff_content_with_context, original_content_line_removal, "original.py"
         )
 
@@ -1006,7 +952,7 @@ def main():
 -import urllib3
 +import urllib3_modified"""
 
-        result_modifying = self.fixer.fix_diff(
+        result_modifying = self.fixer.run(
             diff_content_modifying_last, original_content, "original.py"
         )
 
@@ -1332,7 +1278,7 @@ old lineexcept Exception as e:"""
 old line
 except Exception as e:"""
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+        result = self.fixer.run(diff_content, original_content, "test.py")
 
         # Should process using common logic and maintain single-hunk specific features
         assert "context line" in result
@@ -1361,7 +1307,7 @@ old line 3
 except Exception as e:
 context line 2"""
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+        result = self.fixer.run(diff_content, original_content, "test.py")
 
         # Should process using common logic and maintain multi-hunk specific features
         assert result.count("@@") == 4  # 2 hunks * 2 @@ markers each
@@ -1385,7 +1331,7 @@ new unprefixed line"""
 old line
 except Exception as e:"""
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+        result = self.fixer.run(diff_content, original_content, "test.py")
 
         # Should use common logic to split joined line
         assert "old line" in result
@@ -1487,7 +1433,7 @@ if [[ ! -d "$directory" ]]; then
 fi
 """
 
-        fixed_diff = fixer.fix_diff(diff_content, original_content, "test.txt")
+        fixed_diff = fixer.run(diff_content, original_content, "test.txt")
 
         # Verify the hunk header is corrected to the expected format
         assert "@@ -2,5 +2,7 @@" in fixed_diff, "Expected '@@ -2,5 +2,7 @@' in diff"
@@ -1535,7 +1481,7 @@ fi
         return 0
     return sum(item.price for item in items)"""
 
-        fixed_diff = fixer.fix_diff(diff_content, original_content, "test.py")
+        fixed_diff = fixer.run(diff_content, original_content, "test.py")
 
         # Verify the joined line was split correctly
         lines = fixed_diff.split("\n")
@@ -1637,7 +1583,7 @@ fi
     # Sort mixtures for consistent output
     all_mixtures.sort()"""
 
-        fixed_diff = fixer.fix_diff(diff_content, original_content, "original.py")
+        fixed_diff = fixer.run(diff_content, original_content, "original.py")
         lines = fixed_diff.split("\n")
 
         # Verify the malformed hunk header was fixed
@@ -1700,7 +1646,7 @@ second_line = "old"
 third_line = "value"
 last_line = "old_value\""""
 
-        fixed_diff = fixer.fix_diff(diff_content, original_content, "test.py")
+        fixed_diff = fixer.run(diff_content, original_content, "test.py")
         lines = fixed_diff.split("\n")
 
         # Verify that the last line deletion and addition both get no-newline markers
@@ -1764,7 +1710,7 @@ def test_func_two():
 def test_func_three():
     pass"""
 
-        fixed_diff = fixer.fix_diff(diff_content, original_content, "test.py")
+        fixed_diff = fixer.run(diff_content, original_content, "test.py")
         lines = fixed_diff.split("\n")
 
         # Verify that the function definition line gets proper space prefix
@@ -1821,7 +1767,7 @@ end
 return Utils
 """
 
-        fixed_diff = fixer.fix_diff(diff_content, original_content, "utils.lua")
+        fixed_diff = fixer.run(diff_content, original_content, "utils.lua")
         lines = fixed_diff.split("\n")
 
         # Find the line after "   end" - should be empty context line " " not "      "
@@ -1914,7 +1860,7 @@ def update_function(param: Type):
         assert has_overlaps, "Should detect overlapping hunks in the test diff"
 
         # Test that the fixer processes overlapping hunks
-        result = fixer.fix_diff(diff_content, original_content, "test.py")
+        result = fixer.run(diff_content, original_content, "test.py")
 
         # Should produce fewer hunks than the original (3 -> 2 after merging)
         original_hunk_count = diff_content.count("@@") // 2
@@ -1995,7 +1941,7 @@ def update_function(param: Type):
     return result"""
 
         # Test that overlapping hunks are detected and merged correctly
-        result = fixer.fix_diff(diff_content, original_content, "test.py")
+        result = fixer.run(diff_content, original_content, "test.py")
 
         # Should have fewer hunks than original (3 -> 2 after merging)
         original_hunk_count = diff_content.count("@@") // 2
@@ -2080,7 +2026,7 @@ def old_function():
 
 # Footer comment"""
 
-        fixed_diff = self.fixer.fix_diff(diff_content, original_content, "test.py")
+        fixed_diff = self.fixer.run(diff_content, original_content, "test.py")
         lines = fixed_diff.strip().split("\n")
 
         # Should have proper header with context lines included
@@ -2099,7 +2045,6 @@ def old_function():
     def test_context_line_parametrizable(self):
         """Test that context line count is parametrizable."""
         # Test with 2 context lines
-        fixer_2_lines = DiffFixer(context_lines=2)
 
         diff_content = """--- a/test.py
 +++ b/test.py
@@ -2118,7 +2063,9 @@ def old_function():
 # Footer comment 1
 # Footer comment 2"""
 
-        fixed_diff = fixer_2_lines.fix_diff(diff_content, original_content, "test.py")
+        fixed_diff = DiffFixer.run(
+            diff_content, original_content, "test.py", min_context_lines=2
+        )
         lines = fixed_diff.strip().split("\n")
 
         # Should have 4 context lines total (2 before, 2 after) plus the changes
@@ -2139,19 +2086,14 @@ def old_function():
 
         diff_content = diff_path.read_text()
         original_content = original_path.read_text()
-        expected_content = expected_path.read_text()
 
-        fixed_diff = self.fixer.fix_diff(
+        fixed_diff = self.fixer.run(
             diff_content, original_content, str(original_path)
         )
 
-        # Should match the expected output
-        expected_lines = expected_content.strip().split("\n")
-        actual_lines = fixed_diff.strip().split("\n")
-
         # Check that both hunks have proper headers
-        assert "@@ -79,92 +79,45 @@" in fixed_diff, f"First hunk header incorrect"
-        assert "@@ -189,6 +142,3 @@" in fixed_diff, f"Second hunk header incorrect"
+        assert "@@ -79,92 +79,45 @@" in fixed_diff, "First hunk header incorrect"
+        assert "@@ -189,6 +142,3 @@" in fixed_diff, "Second hunk header incorrect"
 
         # Verify it can be applied by git
         try:
@@ -2192,7 +2134,7 @@ def old_function():
 
 # Footer"""
 
-        fixed_diff = self.fixer.fix_diff(diff_content, original_content, "test.py")
+        fixed_diff = self.fixer.run(diff_content, original_content, "test.py")
 
         # Should preserve the existing context lines and header
         assert (
@@ -2295,7 +2237,7 @@ class TestPreserveFilenames:
         original_content = """def helper():
     return "old\""""
 
-        result = self.fixer.fix_diff(
+        result = self.fixer.run(
             diff_content, original_content, "utils.py", preserve_filenames=True
         )
 
@@ -2342,7 +2284,7 @@ class TestRecentBugFixes:
 
         original_with_newline = "line1\nold_last_line\n"  # Has trailing newline
 
-        result = self.fixer.fix_diff(
+        result = self.fixer.run(
             diff_with_newline, original_with_newline, "test.py"
         )
         assert "\\ No newline at end of file" not in result
@@ -2350,7 +2292,7 @@ class TestRecentBugFixes:
         # Test file WITHOUT trailing newline - should get marker when last line is touched
         original_without_newline = "line1\nold_last_line"  # No trailing newline
 
-        result = self.fixer.fix_diff(
+        result = self.fixer.run(
             diff_with_newline, original_without_newline, "test.py"
         )
         assert "\\ No newline at end of file" in result
@@ -2370,7 +2312,7 @@ missing_prefix_line
 old line
 except Exception:"""
 
-        result = self.fixer.fix_diff(diff_content, original_content, "test.py")
+        result = self.fixer.run(diff_content, original_content, "test.py")
 
         # Should split joined line using common logic
         assert "old line" in result
@@ -2577,7 +2519,6 @@ def run_all_tests():
     test_bugfixes.setup_method()
     tests.extend(
         [
-            test_bugfixes.test_malformed_fast_cluster_reconstruction,
             test_bugfixes.test_no_newline_marker_logic_consistency,
             test_bugfixes.test_common_logic_fallback_integration,
         ]

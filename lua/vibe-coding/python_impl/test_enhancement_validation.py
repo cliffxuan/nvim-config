@@ -37,8 +37,7 @@ def main():
      print("Hello")
      return True"""
 
-    fixer = DiffFixer()
-    result = fixer.fix_diff(diff_content, original_content, "test.py")
+    result = DiffFixer.run(diff_content, original_content, "test.py")
 
     print("Enhanced joined line detection test:")
     print("=" * 50)
@@ -91,8 +90,7 @@ line4"""
  line3
  line4"""
 
-    fixer = DiffFixer()
-    result = fixer.fix_diff(diff_content, original_content, "test.txt")
+    result = DiffFixer.run(diff_content, original_content, "test.txt")
 
     print("\nLine-by-line reconciliation test:")
     print("=" * 50)

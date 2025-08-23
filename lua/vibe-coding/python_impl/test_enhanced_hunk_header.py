@@ -127,7 +127,7 @@ def func2():
 +    print("added")
      return 2"""
 
-    result = fixer.fix_diff(diff_content, original_content, "test.py")
+    result = DiffFixer.run(diff_content, original_content, "test.py")
 
     print(f"Fixed diff result:\n{result}")
 
