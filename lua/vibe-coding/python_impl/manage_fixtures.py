@@ -293,8 +293,6 @@ def generate_correct_diff(fixture_dir, original_file, expected_file):
 
 def test_fixer_on_fixtures(filter_name=None, use_formatted=False, debug=False):
     """Test the fixer on existing fixtures."""
-    fixer = DiffFixer()
-
     success_count = 0
     total_count = 0
     successful_fixtures = []
@@ -353,7 +351,7 @@ def test_fixer_on_fixtures(filter_name=None, use_formatted=False, debug=False):
                 fixed_diff = diff_content
             else:
                 # Generate fixed diff on the fly
-                fixed_diff = fixer.fix_diff(
+                fixed_diff = DiffFixer.run(
                     diff_content, original_content, str(original_file)
                 )
 
