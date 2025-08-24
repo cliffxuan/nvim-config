@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from fix_diff import DiffContext, DiffFixer, DiffFixRule, Hunk, HunkManager
+from fix_diff import DiffContext, DiffFixer, DiffFixRule, HunkManager
 
 
 # Simple test helper to replace pytest functionality
@@ -835,57 +835,6 @@ import requests"""
 class TestUnifiedHunkClasses:
     """Test the new unified hunk classes."""
 
-    def test_hunk_from_header_creation(self):
-        """Test creating Hunk from header line."""
-        from fix_diff import Hunk
-
-        header = "@@ -1,5 +1,6 @@"
-        hunk = Hunk.from_header(header)
-
-        assert hunk is not None
-        assert hunk.header_line == header
-        assert hunk.start_line == 1
-        assert hunk.old_count == 5
-        assert hunk.new_count == 6
-        assert hunk.new_start == 1
-        assert hunk.line_range == (1, 5)
-
-    def test_hunk_from_lines_creation(self):
-        """Test creating Hunk from list of lines."""
-        from fix_diff import Hunk
-
-        lines = ["@@ -10,3 +10,4 @@", " context line", "-deleted line", "+added line"]
-
-        hunk = Hunk.from_lines(lines)
-
-        assert hunk is not None
-        assert hunk.header_line == "@@ -10,3 +10,4 @@"
-        assert hunk.start_line == 10
-        assert hunk.old_count == 3
-        assert hunk.new_count == 4
-        assert len(hunk.content_lines) == 3
-
-    def test_hunk_range_extraction(self):
-        """Test unified range extraction method."""
-        from fix_diff import Hunk
-
-        lines = ["@@ -5,10 +5,12 @@", " some content"]
-        range_result = Hunk.extract_range_from_lines(lines)
-
-        assert range_result == (5, 14)  # start=5, end=5+10-1=14
-
-    def test_hunk_overlap_detection(self):
-        """Test overlap detection between hunks."""
-        from fix_diff import Hunk
-
-        hunk1 = Hunk.from_header("@@ -1,5 +1,5 @@")
-        hunk2 = Hunk.from_header("@@ -4,5 +4,5 @@")  # Overlaps with hunk1
-        hunk3 = Hunk.from_header("@@ -10,5 +10,5 @@")  # No overlap
-
-        assert hunk1.overlaps_with(hunk2)  # (1,5) overlaps with (4,8)
-        assert not hunk1.overlaps_with(hunk3)  # (1,5) doesn't overlap with (10,14)
-        assert not hunk2.overlaps_with(hunk3)  # (4,8) doesn't overlap with (10,14)
-
     def test_hunk_manager_overlap_detection(self):
         """Test HunkManager unified overlap detection."""
         from fix_diff import HunkManager
@@ -916,11 +865,7 @@ class TestUnifiedHunkClasses:
             ["@@ -2,3 +2,4 @@", " context", "-old2", "+new2", "+extra"],
         ]
 
-        original_content = "context\nold1\nold2\nextra_context"
-
-        merged = HunkManager.merge_overlapping_hunks(
-            overlapping_hunks, original_content
-        )
+        merged = HunkManager.merge_overlapping_hunks(overlapping_hunks)
 
         # Should have fewer hunks after merging
         assert len(merged) < len(overlapping_hunks)
@@ -930,22 +875,6 @@ class TestUnifiedHunkClasses:
         merged_hunk = merged[0]
         assert merged_hunk[0].startswith("@@")
         assert "context" in "\n".join(merged_hunk)
-
-    def test_malformed_hunk_handling(self):
-        """Test handling of malformed hunks."""
-        from fix_diff import Hunk
-
-        # Test invalid header
-        invalid_hunk = Hunk.from_header("not a valid header")
-        assert invalid_hunk is None
-
-        # Test empty lines
-        empty_hunk = Hunk.from_lines([])
-        assert empty_hunk is None
-
-        # Test lines without header
-        no_header = Hunk.from_lines([" just content", "+addition"])
-        assert no_header is None
 
     def test_backwards_compatibility(self):
         """Test that old DiffFixer methods still work through delegation."""
@@ -957,7 +886,7 @@ class TestUnifiedHunkClasses:
         has_overlaps = HunkManager.detect_overlaps(hunks)
         assert has_overlaps is False  # No overlap
 
-        range_result = Hunk.extract_range_from_lines(hunks[0])
+        range_result = HunkManager.extract_range_from_lines(hunks[0])
         assert range_result == (1, 3)
 
 
@@ -1547,7 +1476,7 @@ def update_function(param: Type):
     return result"""
 
         # Test overlap detection
-        hunks = fixer._split_diff_into_hunks(diff_content)
+        hunks = HunkManager.split_diff_into_hunks(diff_content)
         has_overlaps = HunkManager.detect_overlaps(hunks)
 
         assert has_overlaps, "Should detect overlapping hunks in the test diff"

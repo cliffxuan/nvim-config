@@ -77,89 +77,6 @@ class DiffConfig:
 
 
 @dataclass
-class Hunk:
-    """Unified hunk representation with parsing and range extraction capabilities."""
-
-    header_line: str
-    content_lines: list[str]
-    start_line: int
-    old_count: int
-    new_count: int
-    new_start: int
-    line_range: tuple[int, int]
-
-    @classmethod
-    def from_header(
-        cls, header_line: str, content_lines: list[str] | None = None
-    ) -> Hunk | None:
-        """Create Hunk from header line with unified parsing logic."""
-        match = DiffConfig.HUNK_HEADER_PATTERN.match(header_line)
-        if not match:
-            return None
-
-        start_line, old_count, new_start, new_count = map(int, match.groups())
-        line_range = (start_line, start_line + old_count - 1)
-
-        return cls(
-            header_line=header_line,
-            content_lines=content_lines or [],
-            start_line=start_line,
-            old_count=old_count,
-            new_count=new_count,
-            new_start=new_start,
-            line_range=line_range,
-        )
-
-    @classmethod
-    def from_lines(cls, hunk_lines: list[str]) -> Hunk | None:
-        """Create Hunk from list of lines, extracting header and content."""
-        if not hunk_lines:
-            return None
-
-        # Find header line
-        header_line = None
-        content_lines = []
-        header_found = False
-
-        for line in hunk_lines:
-            if line.startswith("@@"):
-                if not header_found:
-                    header_line = line
-                    header_found = True
-                else:
-                    # Multiple headers, this is likely a malformed hunk
-                    break
-            elif header_found:
-                content_lines.append(line)
-
-        if not header_line:
-            return None
-
-        return cls.from_header(header_line, content_lines)
-
-    @staticmethod
-    def extract_range_from_lines(hunk_lines: list[str]) -> tuple[int, int] | None:
-        """Extract line range from hunk lines - unified method replacing duplicates."""
-        if not hunk_lines:
-            return None
-
-        for line in hunk_lines:
-            if line.startswith("@@"):
-                match = DiffConfig.HUNK_HEADER_PATTERN.match(line)
-                if match:
-                    start_line, line_count = int(match.group(1)), int(match.group(2))
-                    return (start_line, start_line + line_count - 1)
-        return None
-
-    def overlaps_with(self, other: Hunk) -> bool:
-        """Check if this hunk overlaps with another hunk."""
-        return (
-            self.line_range[0] <= other.line_range[1]
-            and other.line_range[0] <= self.line_range[1]
-        )
-
-
-@dataclass
 class DiffContext:
     """Context information for diff processing."""
 
@@ -681,6 +598,20 @@ class HunkManager:
     """Unified manager for hunk operations including overlap detection and merging."""
 
     @staticmethod
+    def extract_range_from_lines(hunk_lines: list[str]) -> tuple[int, int] | None:
+        """Extract line range from hunk lines - unified method replacing duplicates."""
+        if not hunk_lines:
+            return None
+
+        for line in hunk_lines:
+            if line.startswith("@@"):
+                match = DiffConfig.HUNK_HEADER_PATTERN.match(line)
+                if match:
+                    start_line, line_count = int(match.group(1)), int(match.group(2))
+                    return (start_line, start_line + line_count - 1)
+        return None
+
+    @staticmethod
     def detect_overlaps(hunks: list[list[str]]) -> bool:
         """Unified overlap detection replacing duplicate methods."""
         if len(hunks) <= 1:
@@ -689,24 +620,12 @@ class HunkManager:
         # Extract ranges using unified method
         ranges = []
         for hunk_lines in hunks:
-            hunk_range = Hunk.extract_range_from_lines(hunk_lines)
+            hunk_range = HunkManager.extract_range_from_lines(hunk_lines)
             if hunk_range:
                 ranges.append(hunk_range)
 
         # Check for overlaps using unified logic
         return HunkManager._has_range_overlaps(ranges)
-
-    @staticmethod
-    def detect_overlaps_from_hunk_objects(hunks: list[Hunk]) -> bool:
-        """Detect overlaps from Hunk objects."""
-        if len(hunks) <= 1:
-            return False
-
-        for i in range(len(hunks)):
-            for j in range(i + 1, len(hunks)):
-                if hunks[i].overlaps_with(hunks[j]):
-                    return True
-        return False
 
     @staticmethod
     def _has_range_overlaps(ranges: list[tuple[int, int]]) -> bool:
@@ -719,24 +638,16 @@ class HunkManager:
         return False
 
     @staticmethod
-    def merge_overlapping_hunks(
-        hunks: list[list[str]], original_content: str
-    ) -> list[list[str]]:
+    def merge_overlapping_hunks(hunks: list[list[str]]) -> list[list[str]]:
         """Merge overlapping hunks with unified logic."""
         if not HunkManager.detect_overlaps(hunks):
             return hunks
-
-        return HunkManager._perform_merge(hunks)
-
-    @staticmethod
-    def _perform_merge(hunks: list[list[str]]) -> list[list[str]]:
-        """Perform the actual merging with empty line preservation."""
         merged = []
         i = 0
 
         while i < len(hunks):
             current_hunk = hunks[i]
-            current_range = Hunk.extract_range_from_lines(current_hunk)
+            current_range = HunkManager.extract_range_from_lines(current_hunk)
 
             if not current_range:
                 merged.append(current_hunk)
@@ -749,7 +660,7 @@ class HunkManager:
 
             while j < len(hunks):
                 next_hunk = hunks[j]
-                next_range = Hunk.extract_range_from_lines(next_hunk)
+                next_range = HunkManager.extract_range_from_lines(next_hunk)
 
                 if next_range and HunkManager._ranges_overlap(
                     current_range, next_range
@@ -810,7 +721,7 @@ class HunkManager:
 
         # Use first hunk's start line
         start_line = DiffConfig.DEFAULT_FALLBACK_START_LINE
-        first_range = Hunk.extract_range_from_lines(hunk_group[0])
+        first_range = HunkManager.extract_range_from_lines(hunk_group[0])
         if first_range:
             start_line = first_range[0]
 
@@ -819,6 +730,40 @@ class HunkManager:
 
         new_header = f"@@ -{start_line},{old_count} +{start_line},{new_count} @@"
         return [new_header] + all_content
+
+    @staticmethod
+    def split_diff_into_hunks(diff_content: str) -> list[list[str]]:
+        """Split a diff into individual hunks, each containing header + file headers."""
+        lines = diff_content.strip().split("\n")
+        hunks = []
+        current_hunk = []
+        file_headers = []
+
+        # Collect file headers first
+        i = 0
+        while i < len(lines) and (
+            lines[i].startswith("---") or lines[i].startswith("+++")
+        ):
+            file_headers.append(lines[i])
+            i += 1
+
+        # Process hunks
+        while i < len(lines):
+            line = lines[i]
+            if line.startswith("@@"):
+                # Start of new hunk
+                if current_hunk:
+                    hunks.append(file_headers + current_hunk)
+                current_hunk = [line]  # Start with hunk header
+            else:
+                current_hunk.append(line)
+            i += 1
+
+        # Add the last hunk
+        if current_hunk:
+            hunks.append(file_headers + current_hunk)
+
+        return hunks
 
 
 class DiffFixer:
@@ -1018,40 +963,6 @@ class DiffFixer:
 
         return missing_lines
 
-    @staticmethod
-    def _split_diff_into_hunks(diff_content: str) -> list[list[str]]:
-        """Split a diff into individual hunks, each containing header + file headers."""
-        lines = diff_content.strip().split("\n")
-        hunks = []
-        current_hunk = []
-        file_headers = []
-
-        # Collect file headers first
-        i = 0
-        while i < len(lines) and (
-            lines[i].startswith("---") or lines[i].startswith("+++")
-        ):
-            file_headers.append(lines[i])
-            i += 1
-
-        # Process hunks
-        while i < len(lines):
-            line = lines[i]
-            if line.startswith("@@"):
-                # Start of new hunk
-                if current_hunk:
-                    hunks.append(file_headers + current_hunk)
-                current_hunk = [line]  # Start with hunk header
-            else:
-                current_hunk.append(line)
-            i += 1
-
-        # Add the last hunk
-        if current_hunk:
-            hunks.append(file_headers + current_hunk)
-
-        return hunks
-
     @classmethod
     def _fix_multi_hunk_diff(
         cls,
@@ -1062,7 +973,7 @@ class DiffFixer:
         min_context_lines: int = 1,
     ) -> str:
         """Fix diff with multiple hunks by processing each hunk separately."""
-        hunks = cls._split_diff_into_hunks(diff_content)
+        hunks = HunkManager.split_diff_into_hunks(diff_content)
         if not hunks:
             return "\n"
 
@@ -1117,9 +1028,7 @@ class DiffFixer:
 
         # Merge any overlapping hunks before final processing (only when actually needed)
         if HunkManager.detect_overlaps(all_fixed_hunks):
-            all_fixed_hunks = HunkManager.merge_overlapping_hunks(
-                all_fixed_hunks, original_content
-            )
+            all_fixed_hunks = HunkManager.merge_overlapping_hunks(all_fixed_hunks)
 
         # Now merge the hunks with proper line number sequencing
         merged_hunks = []
@@ -1563,12 +1472,12 @@ class DiffFixer:
         Uses unified processing logic but maintains compatibility by routing
         single-hunk diffs through optimized path.
         """
-        if not diff_content.strip():
+        hunks = HunkManager.split_diff_into_hunks(diff_content)
+        if not hunks:
             return "\n"
 
         # Check if this is a multi-hunk diff
-        hunk_count = diff_content.count("@@") // 2
-        if hunk_count > 1:
+        if len(hunks) > 1:
             # Process multiple hunks using the specialized approach
             return cls._fix_multi_hunk_diff(
                 diff_content,
