@@ -717,7 +717,8 @@ import requests"""
     def test_unified_single_and_multi_hunk_approach(self):
         """Test that the unified approach handles both single and multi-hunk diffs correctly."""
         # Test single hunk
-        single_hunk_diff = """--- a/test.py
+        single_hunk_diff = """
+--- a/test.py
 +++ b/test.py
 @@ -1,2 +1,2 @@
 -old line
@@ -736,18 +737,20 @@ import requests"""
         assert " context line" in result
 
         # Test multi-hunk (with simplified content)
-        multi_hunk_diff = """--- a/test.py
+        multi_hunk_diff = """
+--- a/test.py
 +++ b/test.py
 @@ -1,2 +1,2 @@
 -old line 1
 +new line 1
- context line
+ context line 1
 @@ -3,2 +3,2 @@
+ context line 2
 -old line 2
 +new line 2
  context line 2"""
 
-        multi_original = "old line 1\ncontext line\nold line 2\ncontext line 2\n"
+        multi_original = "old line 1\ncontext line 1\ncontext line 2\nold line 2\ncontext line 2\n"
 
         multi_result = self.fixer.run(multi_hunk_diff, multi_original, "test.py")
 
@@ -1512,17 +1515,16 @@ def update_function(param: Type):
         fixer = DiffFixer()
 
         # Create a diff similar to api_parameter_refactor with overlapping hunks
-        diff_content = """--- a/test.py
+        diff_content = """\
+--- a/test.py
 +++ b/test.py
-@@ -4,7 +4,7 @@
+@@ -4,4 +4,4 @@
      response_model=TestModel,
      dependencies=[Depends(check_permission)],
  )
 -def update_function(param: Type):
 +def update_function(param: str):
      key = generate_key()
-     data = fetch_data(key)
-     if not data:
 @@ -12,7 +12,7 @@
  
      # Process the data
@@ -1544,7 +1546,8 @@ def update_function(param: Type):
 +    )"""
 
         # Original file
-        original_content = """def setup():
+        original_content = """\
+def setup():
     initialize()
 
 def update_function(param: Type):

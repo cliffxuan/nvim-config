@@ -30,7 +30,7 @@
              except Exception:
                  logger.exception(f"Error populating cache for dailer mixture={mixture}")
          store.get_platform_shirts("fast", bypass_cache=True)
-@@ -29,11 +35,16 @@
+@@ -29,12 +35,17 @@
                  )
                  continue
              try:
@@ -48,3 +48,4 @@
 +    
 +    total_duration = time.time() - start_time
 +    logger.info(f"Cache population completed in {total_duration:.2f}s")
+ 

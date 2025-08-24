@@ -1027,8 +1027,7 @@ class DiffFixer:
             all_fixed_hunks.append(hunk_with_context)
 
         # Merge any overlapping hunks before final processing (only when actually needed)
-        if HunkManager.detect_overlaps(all_fixed_hunks):
-            all_fixed_hunks = HunkManager.merge_overlapping_hunks(all_fixed_hunks)
+        all_fixed_hunks = HunkManager.merge_overlapping_hunks(all_fixed_hunks)
 
         # Now merge the hunks with proper line number sequencing
         merged_hunks = []
@@ -2106,12 +2105,6 @@ class DiffFixer:
         header_line = hunk_lines[header_idx]
         content_lines = hunk_lines[header_idx + 1 :]
 
-        # Check if the hunk has only added/deleted lines (no context lines starting with space)
-        has_context = any(line.startswith(" ") for line in content_lines)
-        if has_context:
-            # Already has context lines, return as-is
-            return hunk_lines
-
         # For malformed headers like "@@ ... @@", we need to infer the start line
         # by finding the first deletion line in the original content
         start_line = None
@@ -2158,41 +2151,52 @@ class DiffFixer:
         context_before = []
         for i in range(1, min_context_lines + 1):
             line_idx = start_line - 1 - i  # Convert to 0-based and go backwards
-            if 0 <= line_idx < len(original_lines):
+            if (
+                0 <= line_idx < len(original_lines)
+                and content_lines[min_context_lines - i].startswith(("-", "+"))
+                # and line_idx + 1 < len(original_lines)  # do not if reached file end
+            ):
                 context_before.insert(0, " " + original_lines[line_idx])
 
         # Add context lines after the hunk content
         context_after = []
         # Find the last line that would be affected by the hunk
-        deletion_count = sum(1 for line in content_lines if line.startswith("-"))
-        old_count = max(1, deletion_count)  # Line count in original section
+        addition_count = sum(1 for line in content_lines if line.startswith("+"))
+        old_count = max(1, len(content_lines) - addition_count)
         last_affected_line = (
             start_line - 1 + old_count - 1
         )  # 0-based index of last affected line
 
         for i in range(1, min_context_lines + 1):
             line_idx = last_affected_line + i
-            if 0 <= line_idx < len(original_lines):
+            if (
+                0 <= line_idx < len(original_lines)
+                and content_lines[-i].startswith(("-", "+"))
+                and line_idx + 1 < len(original_lines)  # do not if reached file end
+            ):
                 context_after.append(" " + original_lines[line_idx])
 
         # Combine: header + context_before + content + context_after
-        new_content_lines = context_before + content_lines + context_after
+        updated_content_lines = context_before + content_lines + context_after
 
         # Recalculate header with new line counts
-        context_count = len(context_before) + len(context_after)
-        deletion_count = sum(1 for line in content_lines if line.startswith("-"))
-        addition_count = sum(1 for line in content_lines if line.startswith("+"))
-
-        # Adjust start line to account for context before
-        new_start_line = start_line - len(context_before)
-        old_count = context_count + deletion_count
-        new_count = context_count + addition_count
-
-        new_header = (
-            f"@@ -{new_start_line},{old_count} +{new_start_line},{new_count} @@"
+        updated_deletion_count = sum(
+            1 for line in updated_content_lines if line.startswith("-")
+        )
+        updated_addition_count = sum(
+            1 for line in updated_content_lines if line.startswith("+")
         )
 
-        return hunk_lines[:header_idx] + [new_header] + new_content_lines
+        # Adjust start line to account for context before
+        updated_start_line = start_line - len(context_before)
+        updated_old_count = len(updated_content_lines) - updated_addition_count
+        updated_new_count = len(updated_content_lines) - updated_deletion_count
+
+        updated_header = f"@@ -{updated_start_line},{updated_old_count} +{updated_start_line},{updated_new_count} @@"
+
+        result = hunk_lines[:header_idx] + [updated_header] + updated_content_lines
+        # print("\n".join(result))
+        return result
 
     @staticmethod
     def _verify_and_correct_start_line(
