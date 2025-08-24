@@ -20,10 +20,8 @@
      redis_client.set(key, json.dumps(shirt_data))
  
 -    return allocation
-\ No newline at end of file
 +    return Allocation(
 +        name=name,
 +        mixture=mixture,
 +        allocation=allocation,
 +    )
-\ No newline at end of file

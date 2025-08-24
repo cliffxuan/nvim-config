@@ -440,7 +440,7 @@ function VibePatcher.test_diff_with_external_tool(diff_content, target_file)
   -- Test with git apply --check (if in git repo)
   local is_git_repo = vim.fn.system('git rev-parse --is-inside-work-tree 2>/dev/null'):match 'true'
   if is_git_repo then
-    local git_result = vim.fn.system(string.format('git apply --check %s 2>&1', vim.fn.shellescape(temp_diff)))
+    local git_result = vim.fn.system(string.format('git apply --ignore-space-change --check %s 2>&1', vim.fn.shellescape(temp_diff)))
     local git_exit_code = vim.v.shell_error
 
     vim.fn.delete(temp_diff)
@@ -725,7 +725,7 @@ function VibePatcher.apply_with_external_tool(diff_content, target_file)
   -- Try git apply first (if in git repo)
   local is_git_repo = vim.fn.system('git rev-parse --is-inside-work-tree 2>/dev/null'):match 'true'
   if is_git_repo then
-    local git_result = vim.fn.system(string.format('git apply %s 2>&1', vim.fn.shellescape(temp_diff)))
+    local git_result = vim.fn.system(string.format('git apply --ignore-space-change %s 2>&1', vim.fn.shellescape(temp_diff)))
     local git_exit_code = vim.v.shell_error
 
     if git_exit_code == 0 then

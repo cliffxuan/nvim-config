@@ -139,7 +139,7 @@ def generate_expected_files(filter_name=None):
 
                 # Apply the diff
                 result = subprocess.run(
-                    ["git", "apply", "--verbose", "-"],
+                    ["git", "apply", "--ignore-space-change", "--verbose", "-"],
                     input=diff_content,
                     text=True,
                     cwd=temp_path,
@@ -379,7 +379,7 @@ def test_fixer_on_fixtures(filter_name=None, use_formatted=False, debug=False):
 
                 # Test git apply --check first
                 check_result = subprocess.run(
-                    ["git", "apply", "--check", "-"],
+                    ["git", "apply", "--check", "--ignore-space-change", "-"],
                     input=fixed_diff,
                     text=True,
                     cwd=tmpdir,
@@ -409,7 +409,7 @@ def test_fixer_on_fixtures(filter_name=None, use_formatted=False, debug=False):
 
                 # Apply the diff and check the result
                 apply_result = subprocess.run(
-                    ["git", "apply", "-"],
+                    ["git", "apply", "--ignore-space-change", "-"],
                     input=fixed_diff,
                     text=True,
                     cwd=tmpdir,

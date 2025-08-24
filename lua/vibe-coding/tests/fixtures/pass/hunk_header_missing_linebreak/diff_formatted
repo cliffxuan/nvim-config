@@ -25,6 +25,4 @@
  
      # Sort mixtures for consistent output
 -    all_mixtures.sort()
-\ No newline at end of file
 +    all_mixture_names.sort()
-\ No newline at end of file

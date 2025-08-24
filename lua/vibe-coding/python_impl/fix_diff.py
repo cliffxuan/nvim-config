@@ -861,21 +861,6 @@ class DiffFixer:
         return processed_lines
 
     @classmethod
-    def _apply_common_post_processing(
-        cls, lines: list[str], original_content: str
-    ) -> list[str]:
-        """Apply common post-processing steps shared between single and multi-hunk processing."""
-        processed_lines = lines
-
-        # Handle files without trailing newlines
-        if original_content and not original_content.endswith("\n"):
-            processed_lines = cls._apply_no_newline_markers_to_last_line_changes(
-                processed_lines, original_content
-            )
-
-        return processed_lines
-
-    @classmethod
     def _process_file_headers_common(
         cls, lines: list[str], original_file_path: str, preserve_filenames: bool
     ) -> tuple[list[str], list[str]]:
@@ -1174,9 +1159,6 @@ class DiffFixer:
         # Combine results
         result_parts = fixed_headers + merged_hunks
 
-        # Apply common post-processing steps
-        result_parts = cls._apply_common_post_processing(result_parts, original_content)
-
         result = "\n".join(result_parts)
 
         # Diff patches should always end with a newline for proper git format
@@ -1308,51 +1290,6 @@ class DiffFixer:
             result.append(current_line)
             i += 1
 
-        return result
-
-    # TODO dedup _add_no_newline_marker_if_needed
-    @staticmethod
-    def _apply_no_newline_markers_to_last_line_changes(
-        lines: list[str], original_content: str
-    ) -> list[str]:
-        """Apply '\\ No newline at end of file' markers to deletions and additions that represent the last line of a file without trailing newline."""
-        if not lines or not original_content:
-            return lines
-
-        # Get the last line of the original file (without newline)
-        original_lines = original_content.split("\n")
-
-        result = []
-        last_original_line = original_lines[-1] if original_lines else ""
-        for i, line in enumerate(lines):
-            result.append(line)
-
-            # Check if this is a deletion or addition that represents the last line
-            if line.startswith("-") and not line.startswith("---"):
-                # Check if this deletion content matches the last line of the original file
-                deletion_content = line[1:]  # Remove - prefix
-                if deletion_content.strip() == last_original_line.strip():
-                    # This is a deletion of the last line - add line and separate marker
-                    result.append(DiffConfig.NO_NEWLINE_MARKER)
-            elif line.startswith("+") and not line.startswith("+++"):
-                # For additions, check if this appears to be the last line by checking if it's followed by the end of hunk or file headers
-                addition_content = line[1:]  # Remove + prefix
-                # If the addition has content and we're at the end of meaningful content, it's likely the last line
-                is_last_line = (
-                    addition_content.strip()
-                    and (
-                        i + 1 >= len(lines)  # End of all lines
-                        or lines[i + 1].startswith("---")  # File headers
-                        or (
-                            lines[i + 1].startswith("\\")
-                            and "No newline" in lines[i + 1]
-                        )
-                    )  # No newline marker
-                )
-
-                if is_last_line:
-                    # This is an addition representing the last line - add line and separate marker
-                    result.append(DiffConfig.NO_NEWLINE_MARKER)
         return result
 
     @classmethod
@@ -1604,13 +1541,6 @@ class DiffFixer:
             fixed_lines, original_content
         )
 
-        # Apply common post-processing steps
-        fixed_lines = cls._apply_common_post_processing(fixed_lines, original_content)
-
-        # Add no-newline marker if needed (use early returns to simplify)
-        fixed_lines = cls._add_no_newline_marker_if_needed(
-            fixed_lines, original_content
-        )
         result = "\n".join(fixed_lines)
 
         # Diff patches should always end with a newline for proper git format
@@ -1792,28 +1722,6 @@ class DiffFixer:
 
         # No rule matched
         return {"rule_applied": False, "lines": []}
-
-    @classmethod
-    def _add_no_newline_marker_if_needed(
-        cls, lines: list[str], original_content: str
-    ) -> list[str]:
-        """Add no-newline marker if needed, using early returns for clarity."""
-        # Early return cases where no marker is needed
-        if not lines or not original_content:
-            return lines
-
-        original_lines = original_content.split("\n")
-        if original_content.endswith("\n"):
-            return lines
-        if "\n".join(lines).strip().endswith(DiffConfig.NO_NEWLINE_MARKER):
-            return lines
-        if any(DiffConfig.NO_NEWLINE_MARKER in line for line in lines):
-            return lines
-        if not cls._diff_touches_last_line(lines, original_lines):
-            return lines
-
-        # All conditions met - add the marker
-        return lines + [DiffConfig.NO_NEWLINE_MARKER]
 
     @staticmethod
     def _fix_file_header(

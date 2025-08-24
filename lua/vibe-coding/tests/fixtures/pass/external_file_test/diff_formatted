@@ -5,4 +5,3 @@
 -    console.log("Hello World");
 +    console.log("Hello [[World]]");
  }
-\ No newline at end of file

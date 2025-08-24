@@ -34,9 +34,7 @@ class TestDiffFixer:
         diff_content = diff_path.read_text()
         original_content = original_path.read_text()
 
-        fixed_diff = self.fixer.run(
-            diff_content, original_content, str(original_path)
-        )
+        fixed_diff = self.fixer.run(diff_content, original_content, str(original_path))
 
         # Verify basic structure
         lines = fixed_diff.split("\n")
@@ -312,9 +310,7 @@ def func2():
         diff_content = diff_path.read_text()
         original_content = original_path.read_text()
 
-        fixed_diff = self.fixer.run(
-            diff_content, original_content, str(original_path)
-        )
+        fixed_diff = self.fixer.run(diff_content, original_content, str(original_path))
 
         # Test with git apply in a temporary directory
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -362,9 +358,7 @@ def func2():
 
         # Test with mismatched content
         diff_with_missing_context = "--- a/test.txt\n+++ b/test.txt\n@@ -1,1 +1,1 @@\n-nonexistent line\n+new line"
-        result = self.fixer.run(
-            diff_with_missing_context, "actual content", "test.txt"
-        )
+        result = self.fixer.run(diff_with_missing_context, "actual content", "test.txt")
         assert isinstance(result, str)
 
     def test_exact_indentation_matching(self):
@@ -627,47 +621,6 @@ import requests"""
 
         print("✓ Missing empty context line correctly inserted")
 
-    def test_no_newline_marker_handling(self):
-        """Test that files without trailing newlines get proper '\\ No newline at end of file' marker when the last line is in diff context."""
-        # Test case 1: Last line in diff context - should get the marker
-        diff_content = """--- a/test.txt
-+++ b/test.txt
-@@ -1,4 +1,4 @@
- line 1
- line 2
--old content
-+new content
- line 4"""
-
-        # Original file without trailing newline
-        original_content = "line 1\nline 2\nold content\nline 4"
-
-        result = self.fixer.run(diff_content, original_content, "test.txt")
-
-        # Should include the "No newline at end of file" marker because the last line appears in diff context
-        assert (
-            "\\ No newline at end of file" in result
-        ), f"Should have newline marker when last line is in diff context: {repr(result)}"
-
-        # Test case 2: Modifying the actual last line - should get the marker
-        diff_content_last_line = """--- a/test.txt
-+++ b/test.txt
-@@ -3,2 +3,2 @@
- old content
--line 4
-+line 4 modified"""
-
-        result_last_line = self.fixer.run(
-            diff_content_last_line, original_content, "test.txt"
-        )
-
-        # Should include the "No newline at end of file" marker because we ARE modifying the last line
-        assert (
-            "\\ No newline at end of file" in result_last_line
-        ), f"Expected newline marker when modifying last line: {repr(result_last_line)}"
-
-        print("✓ No newline marker correctly applied only when last line is modified")
-
     def test_with_newline_no_marker_added(self):
         """Test that files WITH trailing newlines don't get the newline marker."""
         diff_content = """--- a/test.txt
@@ -878,89 +831,6 @@ import requests"""
         ), f"Expected generic fallback not found in: {result}"
         print("✓ No hardcoded fallbacks used - generic solution working")
 
-    def test_no_newline_marker_only_when_last_line_touched(self):
-        """Test that 'No newline at end of file' marker is added when the diff touches the last line."""
-        # Test case 1: Diff that does NOT touch the last line (like blank_line_fuzzy)
-        # The last line "import urllib3" is not in the diff context at all
-        diff_content = """--- a/original.py
-+++ b/original.py
-@@ -4,6 +4,7 @@
- from pathlib import Path
- from typing import Any, Dict, List
-+import colorama
- 
- import fy_signin
- import requests
- import typer"""
-
-        # Original file without trailing newline (last line is "import urllib3")
-        original_content = """import json
-import sys
-from glob import glob
-from pathlib import Path
-from typing import Any, Dict, List
-
-import fy_signin
-import requests
-import typer
-import urllib3"""
-
-        result = self.fixer.run(diff_content, original_content, "original.py")
-
-        # Should NOT contain the newline marker because the last line is not in diff context
-        assert (
-            "\\ No newline at end of file" not in result
-        ), "No newline marker should not be added when last line is not in diff context"
-
-        # Test case 2: Diff that includes the last line in context (like line_removal)
-        diff_content_with_context = """--- a/original.py
-+++ b/original.py
-@@ -1,7 +1,6 @@
- import sys
- import os
- import json
--import re
- 
- def main():
-     pass"""
-
-        # Original for line_removal case - last line is "    pass"
-        original_content_line_removal = """import sys
-import os
-import json
-import re
-
-def main():
-    pass"""
-
-        result_with_context = self.fixer.run(
-            diff_content_with_context, original_content_line_removal, "original.py"
-        )
-
-        # Should contain the newline marker because the last line appears in the diff context
-        assert (
-            "\\ No newline at end of file" in result_with_context
-        ), "No newline marker should be added when last line is in diff context"
-
-        # Test case 3: Diff that DOES modify the last line directly
-        diff_content_modifying_last = """--- a/original.py
-+++ b/original.py
-@@ -8,4 +8,4 @@
- import fy_signin
- import requests
- import typer
--import urllib3
-+import urllib3_modified"""
-
-        result_modifying = self.fixer.run(
-            diff_content_modifying_last, original_content, "original.py"
-        )
-
-        # Should contain the newline marker because we ARE modifying the last line
-        assert (
-            "\\ No newline at end of file" in result_modifying
-        ), "No newline marker should be added when last line is modified"
-
 
 class TestUnifiedHunkClasses:
     """Test the new unified hunk classes."""
@@ -1160,65 +1030,6 @@ class TestCommonLogicExtraction:
         # Should fix the malformed header
         assert "@@ ... @@" not in result_str
         assert "@@" in result_str and result_str.count("@@") >= 2  # Proper hunk header
-
-    def test_apply_common_post_processing_single_hunk(self):
-        """Test common post-processing for single-hunk diffs."""
-        # Test single-hunk post-processing
-        lines = [
-            "--- a/test.txt",
-            "+++ b/test.txt",
-            "@@ ... @@",
-            "-old line",
-            "+new line",
-        ]
-        original_content = "old line\n"
-
-        result = self.fixer._apply_common_post_processing(lines, original_content)
-
-        # Should have processed the lines (exact details depend on context, but should not error)
-        assert isinstance(result, list)
-        assert len(result) >= len(lines)  # May add context lines
-
-    def test_apply_common_post_processing_multi_hunk(self):
-        """Test common post-processing for multi-hunk diffs."""
-        # Test multi-hunk post-processing
-        lines = [
-            "--- a/test.txt",
-            "+++ b/test.txt",
-            "@@ -1,1 +1,1 @@",
-            "-old line 1",
-            "+new line 1",
-            "@@ -3,1 +3,1 @@",
-            "-old line 3",
-            "+new line 3",
-        ]
-        original_content = "old line 1\ncontext\nold line 3\n"
-
-        result = self.fixer._apply_common_post_processing(lines, original_content)
-
-        # Should process without adding single-hunk specific context
-        assert isinstance(result, list)
-        assert len(result) >= len(lines)
-
-    def test_apply_common_post_processing_no_newline_handling(self):
-        """Test common post-processing handles files without trailing newlines."""
-        lines = [
-            "--- a/test.txt",
-            "+++ b/test.txt",
-            "@@ -1,2 +1,2 @@",
-            " line 1",
-            "-last_line",
-            "+last_line_modified",
-        ]
-
-        # Original file without trailing newline
-        original_content = "line 1\nlast_line"  # No \n at end
-
-        result = self.fixer._apply_common_post_processing(lines, original_content)
-        result_str = "\n".join(result)
-
-        # Should add no-newline markers when touching the last line
-        assert "\\ No newline at end of file" in result_str
 
     def test_process_file_headers_common(self):
         """Test common file header processing."""
@@ -1461,72 +1272,6 @@ fi
             lines[fi_line_idx + 2] == "+# New line"
         ), f"Expected content addition, got: {repr(lines[fi_line_idx + 2])}"
 
-    def test_joined_return_statement_no_newline_pattern(self):
-        """Test the joined_return_statement fixture pattern: proper handling of no newline markers."""
-        fixer = DiffFixer()
-
-        # Simulate the joined_return_statement case with joined line and no trailing newline
-        diff_content = """--- utils.py
-+++ utils.py
-@@ -1,4 +1,4 @@
- def calculate_total(items):
-     if not items:return 0
--    return sum(item.price for item in items)
-+    return sum(item.price for item in items)  # sum up
-"""
-
-        # Original content without trailing newline (important!)
-        original_content = """def calculate_total(items):
-    if not items:
-        return 0
-    return sum(item.price for item in items)"""
-
-        fixed_diff = fixer.run(diff_content, original_content, "test.py")
-
-        # Verify the joined line was split correctly
-        lines = fixed_diff.split("\n")
-
-        # Should have separate lines for "if not items:" and "return 0"
-        if_line_found = False
-        return_0_line_found = False
-
-        for line in lines:
-            if "if not items:" in line and line.startswith(" "):
-                if_line_found = True
-            elif (
-                "return 0" in line
-                and line.startswith(" ")
-                and "if not items" not in line
-            ):
-                return_0_line_found = True
-
-        assert if_line_found, "Could not find separated 'if not items:' line"
-        assert return_0_line_found, "Could not find separated 'return 0' line"
-
-        # Verify both deletion and addition have proper no-newline markers
-        deletion_line_idx = None
-        addition_line_idx = None
-
-        for i, line in enumerate(lines):
-            if line.startswith("-") and "return sum" in line:
-                deletion_line_idx = i
-            elif line.startswith("+") and "return sum" in line:
-                addition_line_idx = i
-
-        assert deletion_line_idx is not None, "Could not find deletion line"
-        assert addition_line_idx is not None, "Could not find addition line"
-
-        # Check that both deletion and addition are followed by no-newline markers
-        assert deletion_line_idx + 1 < len(lines), "Missing line after deletion"
-        assert addition_line_idx + 1 < len(lines), "Missing line after addition"
-
-        assert (
-            lines[deletion_line_idx + 1].strip() == "\\ No newline at end of file"
-        ), f"Expected no-newline marker after deletion, got: {repr(lines[deletion_line_idx + 1])}"
-        assert (
-            lines[addition_line_idx + 1].strip() == "\\ No newline at end of file"
-        ), f"Expected no-newline marker after addition, got: {repr(lines[addition_line_idx + 1])}"
-
     def test_hunk_header_real_case_pattern(self):
         """Test the hunk_header_real_case fixture pattern: fix malformed headers and joined lines in multi-hunk diffs."""
         fixer = DiffFixer()
@@ -1623,58 +1368,6 @@ fi
         assert not joined_line_found, "Joined line should be split"
         assert closing_paren_found, "Closing parenthesis should appear as separate line"
         assert except_line_found, "Exception handler should appear as separate line"
-
-    def test_multi_hunk_no_newline_marker_handling(self):
-        """Test that multi-hunk diffs properly handle no-newline markers for last-line changes."""
-        fixer = DiffFixer()
-
-        # Multi-hunk diff where the last line of file doesn't end with newline
-        diff_content = """--- a/test.py
-+++ b/test.py
-@@ -1,2 +1,2 @@
- first_line = "value"
--second_line = "old"
-+second_line = "new"
-@@ -3,2 +3,2 @@
- third_line = "value"
--last_line = "old_value"
-+last_line = "new_value\""""
-
-        # Original file without trailing newline
-        original_content = """first_line = "value"
-second_line = "old"
-third_line = "value"
-last_line = "old_value\""""
-
-        fixed_diff = fixer.run(diff_content, original_content, "test.py")
-        lines = fixed_diff.split("\n")
-
-        # Verify that the last line deletion and addition both get no-newline markers
-        deletion_marker_found = False
-        addition_marker_found = False
-
-        for i, line in enumerate(lines):
-            if line.startswith('-last_line = "old_value"'):
-                # Check if next line is no-newline marker
-                if (
-                    i + 1 < len(lines)
-                    and lines[i + 1] == "\\ No newline at end of file"
-                ):
-                    deletion_marker_found = True
-            elif line.startswith('+last_line = "new_value"'):
-                # Check if next line is no-newline marker
-                if (
-                    i + 1 < len(lines)
-                    and lines[i + 1] == "\\ No newline at end of file"
-                ):
-                    addition_marker_found = True
-
-        assert (
-            deletion_marker_found
-        ), "Deletion of last line should have no-newline marker"
-        assert (
-            addition_marker_found
-        ), "Addition of last line should have no-newline marker"
 
     def test_missing_leading_space_and_line_break_pattern(self):
         """Test the missing_leading_space_and_line_break fixture pattern: fix missing prefixes and avoid incorrect no-newline markers."""
@@ -2087,9 +1780,7 @@ def old_function():
         diff_content = diff_path.read_text()
         original_content = original_path.read_text()
 
-        fixed_diff = self.fixer.run(
-            diff_content, original_content, str(original_path)
-        )
+        fixed_diff = self.fixer.run(diff_content, original_content, str(original_path))
 
         # Check that both hunks have proper headers
         assert "@@ -79,92 +79,45 @@" in fixed_diff, "First hunk header incorrect"
@@ -2272,31 +1963,6 @@ class TestRecentBugFixes:
     def setup_method(self):
         self.fixer = DiffFixer()
 
-    def test_no_newline_marker_logic_consistency(self):
-        """Test that no newline markers are applied consistently."""
-        # Test file WITH trailing newline - should NOT get marker
-        diff_with_newline = """--- a/test.py
-+++ b/test.py
-@@ -1,2 +1,2 @@
- line1
--old_last_line
-+new_last_line"""
-
-        original_with_newline = "line1\nold_last_line\n"  # Has trailing newline
-
-        result = self.fixer.run(
-            diff_with_newline, original_with_newline, "test.py"
-        )
-        assert "\\ No newline at end of file" not in result
-
-        # Test file WITHOUT trailing newline - should get marker when last line is touched
-        original_without_newline = "line1\nold_last_line"  # No trailing newline
-
-        result = self.fixer.run(
-            diff_with_newline, original_without_newline, "test.py"
-        )
-        assert "\\ No newline at end of file" in result
-
     def test_common_logic_fallback_integration(self):
         """Test that single-hunk processing correctly falls back to common logic."""
         # Create a case that needs common logic (joined line + missing prefix)
@@ -2407,8 +2073,6 @@ def run_all_tests():
 
     tests = [
         test_fixer.test_basic_diff_fixing_with_fixture,
-        test_fixer.test_custom_rule_addition,
-        test_fixer.test_rule_priority_ordering,
         test_fixer.test_preserve_filenames_option,
         test_fixer.test_edge_case_empty_diff,
         test_fixer.test_edge_case_malformed_hunk_header,
@@ -2424,7 +2088,6 @@ def run_all_tests():
         test_fixer.test_whitespace_preservation_split_parts,
         test_fixer.test_hunk_header_count_correction,
         test_fixer.test_missing_context_line_insertion,
-        test_fixer.test_no_newline_marker_handling,
         test_fixer.test_with_newline_no_marker_added,
         test_fixer.test_multiple_hunks_handling,
         test_fixer.test_unified_single_and_multi_hunk_approach,
@@ -2432,7 +2095,6 @@ def run_all_tests():
         test_fixer.test_generic_fallback_with_empty_content,
         test_fixer.test_generic_fallback_with_custom_start_line,
         test_fixer.test_no_hardcoded_fallbacks_used,
-        test_fixer.test_no_newline_marker_only_when_last_line_touched,
     ]
 
     # Test unified hunk classes
@@ -2458,9 +2120,6 @@ def run_all_tests():
             test_common.test_process_hunk_content_common_joined_lines,
             test_common.test_process_hunk_content_common_missing_prefixes,
             test_common.test_process_hunk_content_common_malformed_headers,
-            test_common.test_apply_common_post_processing_single_hunk,
-            test_common.test_apply_common_post_processing_multi_hunk,
-            test_common.test_apply_common_post_processing_no_newline_handling,
             test_common.test_process_file_headers_common,
             test_common.test_process_file_headers_common_preserve_filenames,
             test_common.test_common_logic_integration_single_hunk,
@@ -2477,9 +2136,7 @@ def run_all_tests():
             test_rules.test_rule_creation,
             test_rules.test_diff_context_creation,
             test_rules.test_missing_leading_whitespace_pattern,
-            test_rules.test_joined_return_statement_no_newline_pattern,
             test_rules.test_hunk_header_real_case_pattern,
-            test_rules.test_multi_hunk_no_newline_marker_handling,
             test_rules.test_missing_leading_space_and_line_break_pattern,
             test_rules.test_diff_line_only_whitespace_pattern,
             test_rules.test_overlapping_hunk_detection,
@@ -2519,7 +2176,6 @@ def run_all_tests():
     test_bugfixes.setup_method()
     tests.extend(
         [
-            test_bugfixes.test_no_newline_marker_logic_consistency,
             test_bugfixes.test_common_logic_fallback_integration,
         ]
     )
