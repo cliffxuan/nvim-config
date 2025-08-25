@@ -758,7 +758,7 @@ class DiffFixer:
     """Main diff fixer orchestrating all components with improved architecture."""
 
     @classmethod
-    def _process_hunk_content_common(
+    def _process_hunk_content(
         cls, hunk_lines: list[str], context: DiffContext
     ) -> list[str]:
         """Common hunk content processing logic shared between single and multi-hunk processing."""
@@ -794,7 +794,7 @@ class DiffFixer:
         return processed_lines
 
     @classmethod
-    def _process_file_headers_common(
+    def _process_file_headers(
         cls, lines: list[str], original_file_path: str, preserve_filenames: bool
     ) -> tuple[list[str], list[str]]:
         """Extract and process file headers common to both single and multi-hunk processing.
@@ -806,7 +806,7 @@ class DiffFixer:
         remaining_lines = []
 
         for line in lines:
-            if line.startswith(("---", "+++")):
+            if cls._is_file_header(line):
                 fixed_header = cls._fix_file_header(
                     line, original_file_path, preserve_filenames
                 )
@@ -815,38 +815,6 @@ class DiffFixer:
                 remaining_lines.append(line)
 
         return file_headers, remaining_lines
-
-    @classmethod
-    def _should_use_common_processing(cls, line: str, context: DiffContext) -> bool:
-        """Determine if single-hunk processing should fall back to common logic for this line.
-
-        Use common processing for:
-        - Joined lines that need splitting
-        - Lines missing diff prefixes (but not file/hunk headers)
-        - Hunk headers (but single-hunk has its own specialized handling, so skip)
-
-        Don't use common processing for:
-        - Lines that need specialized single-hunk state tracking
-        - File headers (handled separately)
-        - Lines already processed by specialized logic
-        """
-        # Don't use common processing for file/hunk headers - single-hunk handles these specially
-        if line.startswith(("---", "+++", "@@")):
-            return False
-
-        # Use common processing for joined lines
-        if cls._is_joined_line_in_context(line, context):
-            return True
-
-        # Use common processing for lines missing diff prefixes (except special cases)
-        if (
-            line.strip()
-            and not line.startswith(("@@", "---", "+++", " ", "+", "-"))
-            and not line.startswith("\\\\")
-        ):  # Don't process no-newline markers
-            return True
-
-        return False
 
     @staticmethod
     def _is_malformed_hunk_header(line: str, context: DiffContext) -> bool:
@@ -896,7 +864,7 @@ class DiffFixer:
             hunk_contents.append(hunk_content)
 
         # Fix file headers using common processing
-        fixed_headers, _ = cls._process_file_headers_common(
+        fixed_headers, _ = cls._process_file_headers(
             file_headers, original_file_path, preserve_filenames
         )
 
@@ -918,7 +886,7 @@ class DiffFixer:
             )
 
             # Use common hunk processing logic
-            hunk_lines = cls._process_hunk_content_common(hunk_content, context)
+            hunk_lines = cls._process_hunk_content(hunk_content, context)
 
             # Add context lines around the hunk if it has only added/deleted lines
             hunk_with_context = cls._add_context_lines_around_hunk(
@@ -1265,7 +1233,6 @@ class DiffFixer:
 
         fixed_lines = []
         i = 0
-        recently_processed_deletion = False  # Track if we just processed a deletion
 
         while i < len(lines):
             line = lines[i]
@@ -1283,7 +1250,6 @@ class DiffFixer:
             if cls._is_deletion_line(line):
                 processed_result = cls._process_deletion_line(line, context)
                 fixed_lines.append(processed_result["line"])
-                recently_processed_deletion = True
                 i += 1
                 continue
 
@@ -1297,21 +1263,17 @@ class DiffFixer:
             # Handle properly formatted context lines
             if line.startswith(" ") and line.strip():
                 processed_result = cls._process_context_line(
-                    line, context, recently_processed_deletion
+                    line, context
                 )
                 if processed_result["should_continue"]:
                     fixed_lines.extend(processed_result["lines"])
-                    recently_processed_deletion = processed_result[
-                        "recently_processed_deletion"
-                    ]
                     i += 1
                     continue
                 # If should_continue is False, continue to rule processing
 
             # Try common hunk processing for cases not handled by specialized logic
             # Use common logic for joined lines and missing prefixes
-            fixed_lines.extend(cls._process_hunk_content_common([line], context))
-            recently_processed_deletion = False
+            fixed_lines.extend(cls._process_hunk_content([line], context))
 
             i += 1
 
@@ -1425,12 +1387,11 @@ class DiffFixer:
         cls,
         line: str,
         context: DiffContext,
-        recently_processed_deletion: bool,
     ) -> dict:
         """Process a context line (space prefix + content).
 
         Returns:
-            dict: Contains 'should_continue', 'lines', 'line_index', 'recently_processed_deletion'
+            dict: Contains 'should_continue', 'lines', 'line_index'
         """
         content_after_prefix = line[1:]
         exact_match = context.find_exact_line_match(content_after_prefix)
@@ -1448,7 +1409,6 @@ class DiffFixer:
                 "should_continue": True,
                 "lines": lines_to_add,
                 "line_index": current_original_index,
-                "recently_processed_deletion": False,
             }
         elif cls._is_joined_line_in_context(line, context):
             # Process as potential joined line instead - continue to rule processing
@@ -1456,7 +1416,6 @@ class DiffFixer:
                 "should_continue": False,
                 "lines": [],
                 "line_index": None,
-                "recently_processed_deletion": recently_processed_deletion,
             }
         else:
             # Line starts with space but doesn't match - this might be a line
@@ -1470,7 +1429,6 @@ class DiffFixer:
                     "should_continue": True,
                     "lines": [" " + line],
                     "line_index": None,
-                    "recently_processed_deletion": recently_processed_deletion,
                 }
             else:
                 # Neither interpretation works - this is likely a malformed context line
@@ -1479,7 +1437,6 @@ class DiffFixer:
                     "should_continue": True,
                     "lines": ["+" + content_after_prefix],
                     "line_index": None,
-                    "recently_processed_deletion": recently_processed_deletion,
                 }
 
     @staticmethod

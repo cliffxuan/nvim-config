@@ -901,7 +901,7 @@ class TestCommonLogicExtraction:
     def setup_method(self):
         self.fixer = DiffFixer()
 
-    def test_process_hunk_content_common_joined_lines(self):
+    def test_process_hunk_content_joined_lines(self):
         """Test that common hunk processing handles joined lines correctly."""
         # Test joined line that should be split
         hunk_lines = ["@@ -1,2 +1,2 @@", "         )except Exception as e:"]
@@ -916,7 +916,7 @@ class TestCommonLogicExtraction:
             preserve_filenames=False,
         )
 
-        result = self.fixer._process_hunk_content_common(hunk_lines, context)
+        result = self.fixer._process_hunk_content(hunk_lines, context)
 
         # Should split into separate lines with correct indentation
         assert "        )" in str(result)  # First part with 8 spaces
@@ -924,7 +924,7 @@ class TestCommonLogicExtraction:
         # Should NOT contain the joined line
         assert ")except Exception as e:" not in str(result)
 
-    def test_process_hunk_content_common_missing_prefixes(self):
+    def test_process_hunk_content_missing_prefixes(self):
         """Test that common hunk processing adds missing diff prefixes."""
         hunk_lines = ["@@ -1,2 +1,2 @@", "existing line", "new line"]
 
@@ -938,7 +938,7 @@ class TestCommonLogicExtraction:
             preserve_filenames=False,
         )
 
-        result = self.fixer._process_hunk_content_common(hunk_lines, context)
+        result = self.fixer._process_hunk_content(hunk_lines, context)
         result_str = "\n".join(result)
 
         # Should infer that 'existing line' is context (exists in original)
@@ -946,7 +946,7 @@ class TestCommonLogicExtraction:
         assert " existing line" in result_str or "+existing line" in result_str
         assert "+new line" in result_str
 
-    def test_process_hunk_content_common_malformed_headers(self):
+    def test_process_hunk_content_malformed_headers(self):
         """Test that common hunk processing fixes malformed hunk headers."""
         hunk_lines = ["@@ ... @@", " context line", "-old line", "+new line"]
         original_lines = ["context line", "old line"]
@@ -958,14 +958,14 @@ class TestCommonLogicExtraction:
             preserve_filenames=False,
         )
 
-        result = self.fixer._process_hunk_content_common(hunk_lines, context)
+        result = self.fixer._process_hunk_content(hunk_lines, context)
         result_str = "\n".join(result)
 
         # Should fix the malformed header
         assert "@@ ... @@" not in result_str
         assert "@@" in result_str and result_str.count("@@") >= 2  # Proper hunk header
 
-    def test_process_file_headers_common(self):
+    def test_process_file_headers(self):
         """Test common file header processing."""
         lines = [
             "--- original/path.txt",
@@ -975,7 +975,7 @@ class TestCommonLogicExtraction:
             "+new",
         ]
 
-        file_headers, remaining_lines = self.fixer._process_file_headers_common(
+        file_headers, remaining_lines = self.fixer._process_file_headers(
             lines, "test.txt", preserve_filenames=False
         )
 
@@ -990,7 +990,7 @@ class TestCommonLogicExtraction:
         assert "-old" in remaining_lines
         assert "+new" in remaining_lines
 
-    def test_process_file_headers_common_preserve_filenames(self):
+    def test_process_file_headers_preserve_filenames(self):
         """Test common file header processing with filename preservation."""
         lines = [
             "--- original/path.txt",
@@ -1000,7 +1000,7 @@ class TestCommonLogicExtraction:
             "+new",
         ]
 
-        file_headers, _ = self.fixer._process_file_headers_common(
+        file_headers, _ = self.fixer._process_file_headers(
             lines, "test.txt", preserve_filenames=True
         )
 
@@ -1085,38 +1085,6 @@ except Exception as e:"""
 
         # Should use common logic to add prefix to unprefixed line
         assert "+new unprefixed line" in result
-
-    def test_should_use_common_processing_logic(self):
-        """Test the _should_use_common_processing decision logic."""
-        # Create context with some original lines for joined line detection
-        context = DiffContext(
-            lines=["test line"],
-            original_lines=["line1", "line2"],
-            line_index=0,
-            preserve_filenames=False,
-        )
-
-        # Should NOT use common processing for headers
-        assert not self.fixer._should_use_common_processing("--- a/file.txt", context)
-        assert not self.fixer._should_use_common_processing("+++ b/file.txt", context)
-        assert not self.fixer._should_use_common_processing("@@ -1,1 +1,1 @@", context)
-
-        # Should NOT use common processing for no-newline markers
-        assert not self.fixer._should_use_common_processing(
-            "\\\\ No newline at end of file", context
-        )
-
-        # Should use common processing for unprefixed lines
-        assert self.fixer._should_use_common_processing("unprefixed line", context)
-
-        # Should NOT use common processing for already prefixed lines
-        assert not self.fixer._should_use_common_processing(" context line", context)
-        assert not self.fixer._should_use_common_processing("+addition line", context)
-        assert not self.fixer._should_use_common_processing("-deletion line", context)
-
-        # Should NOT use common processing for empty lines
-        assert not self.fixer._should_use_common_processing("", context)
-
 
 class TestDiffFixRuleSystem:
     """Test the rule system specifically."""
@@ -2028,15 +1996,14 @@ def run_all_tests():
     test_common.setup_method()
     tests.extend(
         [
-            test_common.test_process_hunk_content_common_joined_lines,
-            test_common.test_process_hunk_content_common_missing_prefixes,
-            test_common.test_process_hunk_content_common_malformed_headers,
-            test_common.test_process_file_headers_common,
-            test_common.test_process_file_headers_common_preserve_filenames,
+            test_common.test_process_hunk_content_joined_lines,
+            test_common.test_process_hunk_content_missing_prefixes,
+            test_common.test_process_hunk_content_malformed_headers,
+            test_common.test_process_file_headers,
+            test_common.test_process_file_headers_preserve_filenames,
             test_common.test_common_logic_integration_single_hunk,
             test_common.test_common_logic_integration_multi_hunk,
             test_common.test_single_hunk_uses_common_logic_fallback,
-            test_common.test_should_use_common_processing_logic,
         ]
     )
 
