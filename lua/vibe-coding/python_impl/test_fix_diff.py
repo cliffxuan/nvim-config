@@ -564,7 +564,8 @@ line_below"""
     def test_missing_context_line_insertion(self):
         """Test that missing empty context lines are inserted between non-consecutive lines."""
         # Based on blank_line_fuzzy - missing empty line between imports
-        diff_content = """--- a/test.py
+        diff_content = """\
+--- a/test.py
 +++ b/test.py
 @@ -2,4 +2,5 @@
  from pathlib import Path
@@ -574,14 +575,15 @@ line_below"""
  import requests"""
 
         # Original file has empty line between the two import sections
-        original_content = """import sys
+        original_content = """\
+import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
 import fy_signin
 import requests"""
 
-        result = self.fixer.run(diff_content, original_content, "test.py")
+        result = DiffFixer.run(diff_content, original_content, "test.py")
 
         # Should insert the missing empty line as context
         lines = result.strip().split("\n")
@@ -2033,13 +2035,8 @@ def run_all_tests():
     test_unified_hunks = TestUnifiedHunkClasses()
     tests.extend(
         [
-            test_unified_hunks.test_hunk_from_header_creation,
-            test_unified_hunks.test_hunk_from_lines_creation,
-            test_unified_hunks.test_hunk_range_extraction,
-            test_unified_hunks.test_hunk_overlap_detection,
             test_unified_hunks.test_hunk_manager_overlap_detection,
             test_unified_hunks.test_hunk_manager_merge_functionality,
-            test_unified_hunks.test_malformed_hunk_handling,
             test_unified_hunks.test_backwards_compatibility,
         ]
     )

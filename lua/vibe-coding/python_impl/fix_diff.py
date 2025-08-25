@@ -533,7 +533,7 @@ class DiffContext:
 
                     # Count actual line types and track the span
                     for line in hunk_content_lines:
-                        if line.startswith("-") and not line.startswith("---"):
+                        if DiffFixer._is_deletion_line(line):
                             deletion_count += 1
                             # Find this deleted line in the original to track span
                             deleted_content = line[1:]
@@ -546,7 +546,7 @@ class DiffContext:
                                         last_line_with_content, k
                                     )
                                     break
-                        elif line.startswith("+") and not line.startswith("+++"):
+                        elif DiffFixer._is_addition_line(line):
                             addition_count += 1
                         elif line.strip():  # Any other content line
                             # Try to find this line in the original to track span
@@ -912,57 +912,6 @@ class DiffFixer:
         # Check if the line counts in the header match the actual diff content
         return context.has_incorrect_line_counts(line)
 
-    @staticmethod
-    def _get_missing_context_lines(
-        last_index: int, current_index: int, context: DiffContext
-    ) -> list[str]:
-        """Get missing context lines between two positions in the original file.
-
-        This is a very specific fix for the blank_line_fuzzy case where there's
-        a missing empty line between import groups.
-        """
-        missing_lines = []
-
-        # If this is the first line we're processing, no missing context
-        if last_index == -1:
-            return missing_lines
-
-        # Only insert missing context for very specific patterns:
-        # - Gap of exactly 1 line (empty line between imports)
-        # - Both lines are import statements
-        gap_size = current_index - last_index - 1
-        if gap_size != 1:  # Only handle single missing lines
-            return missing_lines
-
-        # Check if both the previous and current lines are import-related
-        prev_line = (
-            context.original_lines[last_index]
-            if last_index < len(context.original_lines)
-            else ""
-        )
-        curr_line = (
-            context.original_lines[current_index]
-            if current_index < len(context.original_lines)
-            else ""
-        )
-
-        # Only apply this fix if we have imports around an empty line
-        if not (
-            prev_line.strip().startswith(("import ", "from "))
-            and curr_line.strip().startswith("import ")
-        ):
-            return missing_lines
-
-        # Check the missing line at the gap
-        missing_index = last_index + 1
-        if 0 <= missing_index < len(context.original_lines):
-            missing_line = context.original_lines[missing_index]
-            # Only insert if it's an empty line
-            if missing_line.strip() == "":
-                missing_lines.append(" " + missing_line)
-
-        return missing_lines
-
     @classmethod
     def _fix_multi_hunk_diff(
         cls,
@@ -1091,23 +1040,23 @@ class DiffFixer:
 
         return f"@@ -{old_start},{old_count} +{adjusted_new_start},{new_count} @@"
 
-    @staticmethod
-    def _calculate_hunk_line_offset(hunk_lines: list[str]) -> int:
+    @classmethod
+    def _calculate_hunk_line_offset(cls, hunk_lines: list[str]) -> int:
         """Calculate the net line offset this hunk contributes (additions - deletions)."""
         additions = 0
         deletions = 0
 
         for line in hunk_lines:
-            if line.startswith("+") and not line.startswith("+++"):
+            if cls._is_addition_line(line):
                 additions += 1
-            elif line.startswith("-") and not line.startswith("---"):
+            elif cls._is_deletion_line(line):
                 deletions += 1
 
         return additions - deletions
 
-    @staticmethod
+    @classmethod
     def _diff_touches_last_line(
-        diff_lines: list[str], original_lines: list[str]
+        cls, diff_lines: list[str], original_lines: list[str]
     ) -> bool:
         """Check if the diff touches the last line or if the last line appears in diff context."""
         if not original_lines or not diff_lines:
@@ -1118,7 +1067,7 @@ class DiffFixer:
 
         # Check if any deletion matches the last line of the original file
         for line in diff_lines:
-            if line.startswith("-") and not line.startswith("---"):
+            if cls._is_deletion_line(line):
                 deletion_content = line[1:]  # Remove - prefix
                 if deletion_content == last_original_line:
                     return True
@@ -1138,10 +1087,7 @@ class DiffFixer:
 
         if has_last_line_deletion:
             # If the last line was deleted, any addition could be modifying the last line
-            return any(
-                line.startswith("+") and not line.startswith("+++")
-                for line in diff_lines
-            )
+            return any(cls._is_addition_line(line) for line in diff_lines)
 
         return False
 
@@ -1366,9 +1312,6 @@ class DiffFixer:
 
         fixed_lines = []
         i = 0
-        last_original_line_index = (
-            -1
-        )  # Track position in original file for context gap detection
         recently_processed_deletion = False  # Track if we just processed a deletion
 
         rules = cls._create_default_rules()
@@ -1389,8 +1332,6 @@ class DiffFixer:
                 processed_result = cls._process_deletion_line(line, context)
                 fixed_lines.append(processed_result["line"])
                 recently_processed_deletion = True
-                if processed_result["line_index"] is not None:
-                    last_original_line_index = processed_result["line_index"]
                 i += 1
                 continue
 
@@ -1404,12 +1345,10 @@ class DiffFixer:
             # Handle properly formatted context lines
             if line.startswith(" ") and line.strip():
                 processed_result = cls._process_context_line(
-                    line, context, last_original_line_index, recently_processed_deletion
+                    line, context, recently_processed_deletion
                 )
                 if processed_result["should_continue"]:
                     fixed_lines.extend(processed_result["lines"])
-                    if processed_result["line_index"] is not None:
-                        last_original_line_index = processed_result["line_index"]
                     recently_processed_deletion = processed_result[
                         "recently_processed_deletion"
                     ]
@@ -1501,6 +1440,11 @@ class DiffFixer:
         return line.startswith(("---", "+++"))
 
     @staticmethod
+    def _is_addition_line(line: str) -> bool:
+        """Check if a line is a deletion line."""
+        return line.startswith("+") and not line.startswith("+++")
+
+    @staticmethod
     def _is_deletion_line(line: str) -> bool:
         """Check if a line is a deletion line."""
         return line.startswith("-") and not line.startswith("---")
@@ -1540,7 +1484,6 @@ class DiffFixer:
         cls,
         line: str,
         context: DiffContext,
-        last_original_line_index: int,
         recently_processed_deletion: bool,
     ) -> dict:
         """Process a context line (space prefix + content).
@@ -1556,12 +1499,6 @@ class DiffFixer:
             # and we're dealing with import-like patterns
             current_original_index = exact_match[0]
             lines_to_add = []
-
-            if not recently_processed_deletion:
-                missing_context = cls._get_missing_context_lines(
-                    last_original_line_index, current_original_index, context
-                )
-                lines_to_add.extend(missing_context)
 
             # This is a properly formatted unchanged line - keep as-is
             lines_to_add.append(line)
