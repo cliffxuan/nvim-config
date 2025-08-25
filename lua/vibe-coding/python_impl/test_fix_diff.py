@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from fix_diff import DiffContext, DiffFixer, DiffFixRule, HunkManager
+from fix_diff import DiffContext, DiffFixer, HunkManager
 
 
 # Simple test helper to replace pytest functionality
@@ -1121,24 +1121,6 @@ except Exception as e:"""
 class TestDiffFixRuleSystem:
     """Test the rule system specifically."""
 
-    def test_rule_creation(self):
-        """Test creating custom rules."""
-        rule = DiffFixRule(
-            name="test",
-            matcher=lambda line, ctx: True,
-            fixer=lambda line, ctx: [line],
-            priority=5,
-            applies_to="all",
-        )
-
-        assert rule.name == "test"
-        assert rule.priority == 5
-        assert rule.applies_to == "all"
-        # Test matcher with dummy context
-
-        dummy_context = DiffContext([], [], 0, False)
-        assert rule.matcher("anything", dummy_context)
-
     def test_diff_context_creation(self):
         """Test DiffContext creation and usage."""
         context = DiffContext(
@@ -2062,7 +2044,6 @@ def run_all_tests():
     test_rules = TestDiffFixRuleSystem()
     tests.extend(
         [
-            test_rules.test_rule_creation,
             test_rules.test_diff_context_creation,
             test_rules.test_missing_leading_whitespace_pattern,
             test_rules.test_hunk_header_real_case_pattern,

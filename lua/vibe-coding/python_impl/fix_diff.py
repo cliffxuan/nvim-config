@@ -11,7 +11,6 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
 from hunk_locator import find_hunk_location
 
@@ -583,17 +582,6 @@ class DiffContext:
         return [line]
 
 
-@dataclass
-class DiffFixRule:
-    """A configurable rule for fixing diff issues."""
-
-    name: str
-    matcher: Callable[[str, DiffContext], bool]
-    fixer: Callable[[str, DiffContext], list[str]]
-    priority: int = 0  # Higher priority rules are applied first
-    applies_to: str = "all"  # "header", "body", or "all"
-
-
 class HunkManager:
     """Unified manager for hunk operations including overlap detection and merging."""
 
@@ -859,41 +847,6 @@ class DiffFixer:
             return True
 
         return False
-
-    @classmethod
-    def _create_default_rules(cls) -> list[DiffFixRule]:
-        """Create default set of configurable rules."""
-        return [
-            # Rule for malformed hunk headers (header-only)
-            DiffFixRule(
-                name="malformed_hunks",
-                matcher=cls._is_malformed_hunk_header,
-                fixer=lambda line, context: context.fix_hunk_header(line),
-                priority=15,
-                applies_to="header",
-            ),
-            # Rule for joined statements (body-only, context-aware)
-            DiffFixRule(
-                name="joined_statements",
-                matcher=cls._is_joined_line_in_context,
-                fixer=lambda line, context: context.split_joined_line_with_context(
-                    line
-                ),
-                priority=10,
-                applies_to="body",
-            ),
-            # Rule for missing diff prefixes (body-only)
-            DiffFixRule(
-                name="missing_prefixes",
-                matcher=lambda line, _: bool(
-                    line.strip()
-                    and not line.startswith(("@@", "---", "+++", " ", "+", "-"))
-                ),
-                fixer=lambda line, context: [context.add_appropriate_prefix(line)],
-                priority=5,
-                applies_to="body",
-            ),
-        ]
 
     @staticmethod
     def _is_malformed_hunk_header(line: str, context: DiffContext) -> bool:
@@ -1314,7 +1267,6 @@ class DiffFixer:
         i = 0
         recently_processed_deletion = False  # Track if we just processed a deletion
 
-        rules = cls._create_default_rules()
         while i < len(lines):
             line = lines[i]
             context.line_index = i
@@ -1356,21 +1308,10 @@ class DiffFixer:
                     continue
                 # If should_continue is False, continue to rule processing
 
-            # Apply rule processing with early return
-            processed_result = cls._apply_rules_to_line(line, context, rules)
-            if processed_result["rule_applied"]:
-                fixed_lines.extend(processed_result["lines"])
-                recently_processed_deletion = False
-            else:
-                # Try common hunk processing for cases not handled by specialized logic
-                if cls._should_use_common_processing(line, context):
-                    # Use common logic for joined lines and missing prefixes
-                    common_result = cls._process_hunk_content_common([line], context)
-                    fixed_lines.extend(common_result)
-                    recently_processed_deletion = False
-                else:
-                    # No rule matched, keep line as-is or apply basic fixing
-                    fixed_lines.append(cls._basic_line_fix(line))
+            # Try common hunk processing for cases not handled by specialized logic
+            # Use common logic for joined lines and missing prefixes
+            fixed_lines.extend(cls._process_hunk_content_common([line], context))
+            recently_processed_deletion = False
 
             i += 1
 
@@ -1542,33 +1483,6 @@ class DiffFixer:
                 }
 
     @staticmethod
-    def _apply_rules_to_line(
-        line: str, context: DiffContext, rules: list[DiffFixRule]
-    ) -> dict:
-        """Apply rules to a line with simplified control flow.
-
-        Returns:
-            dict: Contains 'rule_applied' (bool) and 'lines' (list[str])
-        """
-        # Determine if this is a header or body line
-        line_type = "header" if line.startswith("@@") else "body"
-
-        # Apply rules in priority order, filtering by line type
-        for rule in rules:
-            if rule.applies_to not in ("all", line_type):
-                continue
-
-            if not rule.matcher(line, context):
-                continue
-
-            # Rule matches - apply fixer and return early
-            result_lines = rule.fixer(line, context)
-            return {"rule_applied": True, "lines": result_lines}
-
-        # No rule matched
-        return {"rule_applied": False, "lines": []}
-
-    @staticmethod
     def _fix_file_header(
         line: str, original_file_path: str, preserve_filenames: bool
     ) -> str:
@@ -1597,23 +1511,6 @@ class DiffFixer:
             return f"--- a/{filename}"
         else:
             return f"+++ b/{filename}"
-
-    @staticmethod
-    def _basic_line_fix(line: str) -> str:
-        """Apply basic fixes to lines that don't match specific rules."""
-        if not line:
-            return line
-
-        # Keep hunk headers and other special lines as-is
-        if line.startswith("@@"):
-            return line
-
-        # Ensure diff content lines have proper prefixes
-        if line.startswith(" ") or line.startswith("+") or line.startswith("-"):
-            return line
-
-        # Add context prefix to unprefixed content
-        return " " + line
 
     @classmethod
     def _is_joined_line_in_context(cls, line: str, context: DiffContext) -> bool:
