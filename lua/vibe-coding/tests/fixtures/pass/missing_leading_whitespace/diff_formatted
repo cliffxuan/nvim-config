@@ -1,6 +1,6 @@
 --- a/original.txt
 +++ b/original.txt
-@@ -2,5 +2,7 @@
+@@ -1,5 +1,7 @@
  # Check if directory exists
  if [[ ! -d "$directory" ]]; then
      echo "Error: Directory '$directory' does not exist." >&2

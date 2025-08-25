@@ -752,7 +752,9 @@ import requests"""
 +new line 2
  context line 2"""
 
-        multi_original = "old line 1\ncontext line 1\ncontext line 2\nold line 2\ncontext line 2\n"
+        multi_original = (
+            "old line 1\ncontext line 1\ncontext line 2\nold line 2\ncontext line 2\n"
+        )
 
         multi_result = self.fixer.run(multi_hunk_diff, multi_original, "test.py")
 
@@ -916,7 +918,7 @@ class TestCommonLogicExtraction:
             preserve_filenames=False,
         )
 
-        result = self.fixer._process_hunk_content(hunk_lines, context)
+        result = self.fixer._process_hunk_content(context)
 
         # Should split into separate lines with correct indentation
         assert "        )" in str(result)  # First part with 8 spaces
@@ -938,7 +940,7 @@ class TestCommonLogicExtraction:
             preserve_filenames=False,
         )
 
-        result = self.fixer._process_hunk_content(hunk_lines, context)
+        result = self.fixer._process_hunk_content(context)
         result_str = "\n".join(result)
 
         # Should infer that 'existing line' is context (exists in original)
@@ -958,7 +960,7 @@ class TestCommonLogicExtraction:
             preserve_filenames=False,
         )
 
-        result = self.fixer._process_hunk_content(hunk_lines, context)
+        result = self.fixer._process_hunk_content(context)
         result_str = "\n".join(result)
 
         # Should fix the malformed header
@@ -1086,6 +1088,7 @@ except Exception as e:"""
         # Should use common logic to add prefix to unprefixed line
         assert "+new unprefixed line" in result
 
+
 class TestDiffFixRuleSystem:
     """Test the rule system specifically."""
 
@@ -1108,7 +1111,8 @@ class TestDiffFixRuleSystem:
         fixer = DiffFixer()
 
         # Simulate the missing_leading_whitespace case
-        diff_content = """--- scripts/bao
+        diff_content = """\
+--- scripts/bao
 +++ scripts/bao
 @@ ... @@
 # Check if directory exists
@@ -1121,7 +1125,8 @@ fi
 """
 
         # Original content should include the empty line that gets converted
-        original_content = """# Check if directory exists
+        original_content = """\
+# Check if directory exists
 if [[ ! -d "$directory" ]]; then
     echo "Error: Directory '$directory' does not exist." >&2
     exit 1
@@ -1131,7 +1136,7 @@ fi
         fixed_diff = fixer.run(diff_content, original_content, "test.txt")
 
         # Verify the hunk header is corrected to the expected format
-        assert "@@ -2,5 +2,7 @@" in fixed_diff, "Expected '@@ -2,5 +2,7 @@' in diff"
+        assert "@@ -1,5 +1,7 @@" in fixed_diff, "Expected '@@ -1,5 +1,7 @@' in diff"
 
         # Verify the structure: fi context line, then empty addition, then content addition
         lines = fixed_diff.split("\n")

@@ -35,6 +35,8 @@ class DiffConfig:
     MIN_HUNK_SIZE = 1  # Minimum lines in a hunk section
     DEFAULT_CONTEXT_LINES = 1  # Default number of context lines to add around hunks
 
+    MIN_HUNK_LOCATION_CONFIDENCE = 0.825
+
     @staticmethod
     def create_fallback_header(
         content_lines: list[str], start_line: int | None = None
@@ -73,6 +75,16 @@ class DiffConfig:
         # If no valid pattern found, create a minimal generic header
         # This should rarely be used since most malformed headers contain some valid pattern
         return cls.create_fallback_header([])
+
+    @staticmethod
+    def is_deletion_line(line: str) -> bool:
+        """Check if a line is a deletion line."""
+        return line.startswith("-") and not line.startswith("---")
+
+    @staticmethod
+    def is_addition_line(line: str) -> bool:
+        """Check if a line is a deletion line."""
+        return line.startswith("+") and not line.startswith("+++")
 
 
 @dataclass
@@ -352,7 +364,9 @@ class DiffContext:
         result = find_hunk_location(
             "\n".join(self.lines), "\n".join(self.original_lines)
         )
-        if result and result[2] > 0.825:  # TODO increase this as high as possible
+        if (
+            result and result[2] > DiffConfig.MIN_HUNK_LOCATION_CONFIDENCE
+        ):  # TODO increase this as high as possible
             return self.calculate_hunk_header_from_anchor(result[0] + 1)
         # TODO avoid doing stuff below
         for i in range(self.line_index + 1, len(self.lines)):
@@ -532,7 +546,7 @@ class DiffContext:
 
                     # Count actual line types and track the span
                     for line in hunk_content_lines:
-                        if DiffFixer._is_deletion_line(line):
+                        if DiffConfig.is_deletion_line(line):
                             deletion_count += 1
                             # Find this deleted line in the original to track span
                             deleted_content = line[1:]
@@ -545,7 +559,7 @@ class DiffContext:
                                         last_line_with_content, k
                                     )
                                     break
-                        elif DiffFixer._is_addition_line(line):
+                        elif DiffConfig.is_addition_line(line):
                             addition_count += 1
                         elif line.strip():  # Any other content line
                             # Try to find this line in the original to track span
@@ -580,6 +594,97 @@ class DiffContext:
             return [self.infer_hunk_header()]
 
         return [line]
+
+    def would_split_improve_match(self, line: str) -> bool:
+        """Check if splitting a line would better match the original file structure using strict matching."""
+        # First check if the exact line (including indentation) exists in the original
+        clean_line = line
+        if line.startswith((" ", "+", "-")):
+            clean_line = line[1:]
+
+        exact_match = self.find_exact_line_match(clean_line)
+        if exact_match:
+            return False  # Don't split if exact match exists
+
+        # Try different split strategies and see if parts match exactly
+        potential_splits = self.get_potential_splits(line)
+
+        for split_parts in potential_splits:
+            # Check if split parts individually exist exactly in original
+            exact_matches = 0
+            for part in split_parts:
+                exact_match = self.find_exact_line_match(part)
+                if exact_match:
+                    exact_matches += 1
+
+            # Only split if we have exact matches for multiple parts
+            if exact_matches > 1:
+                return True
+
+        return False
+
+    def is_joined_line_in_context(self, line: str) -> bool:
+        """Check if line appears to be joined by using only original file structure as context."""
+        if not line.strip() or line.startswith(("@@",)):
+            return False
+
+        # Strip diff prefixes
+        line_content = line
+        if line.startswith((" ", "+", "-")):
+            line_content = line[1:]
+
+        # Skip empty content after prefix removal
+        if not line_content.strip():
+            return False
+
+        # Generic approach: A line is likely joined if:
+        # 1. It doesn't exist as-is in the original file, AND
+        # 2. It can be split into parts that DO exist in the original file
+
+        # First check if the line exists as-is in original
+        exact_match = self.find_exact_line_match(line_content)
+        if exact_match:
+            return False  # Line exists as-is, no need to split
+
+        # Check if we can split this line into parts that exist in original
+        return self.would_split_improve_match(line)
+
+    def validate_unchanged_line(self, line: str) -> str:
+        """Validate that an unchanged line exists in the original file with exact indentation."""
+        if not line.startswith(" "):
+            return line
+
+        content = line[1:]  # Remove the space prefix
+        match = self.find_exact_line_match(content)
+
+        if match:
+            # Line exists in original with exact indentation - keep as unchanged
+            return line
+        else:
+            # Try to find the closest match and correct indentation
+            corrected_line = self.find_similar_match(content)
+            if corrected_line is not None:
+                # corrected_line already has proper indentation from original, just add diff prefix
+                return " " + corrected_line
+            else:
+                # No match found - might be an addition instead
+                return "+" + content
+
+    def is_malformed_hunk_header(self, line: str) -> bool:
+        """Check if a hunk header is malformed or has incorrect counts."""
+        if not line.startswith("@@"):
+            return False
+
+        # Check basic format issues
+        if (
+            line.strip() == "@@ ... @@"
+            or line.count("@@") != 2
+            or not re.match(r"^@@ -\d+,\d+ \+\d+,\d+ @@\s*$", line)
+        ):
+            return True
+
+        # Check if the line counts in the header match the actual diff content
+        return self.has_incorrect_line_counts(line)
 
 
 class HunkManager:
@@ -758,16 +863,38 @@ class DiffFixer:
     """Main diff fixer orchestrating all components with improved architecture."""
 
     @classmethod
-    def _process_hunk_content(
-        cls, hunk_lines: list[str], context: DiffContext
-    ) -> list[str]:
+    def _process_hunk_content(cls, context: DiffContext) -> list[str]:
         """Common hunk content processing logic shared between single and multi-hunk processing."""
         processed_lines = []
 
-        for line in hunk_lines:
+        for i, line in enumerate(context.lines):
+            context.line_index = i
+            if cls._is_file_header(line):
+                continue
+
+            # Handle deletion lines
+            if DiffConfig.is_deletion_line(line):
+                processed_result = cls._process_deletion_line(line, context)
+                processed_lines.append(processed_result["line"])
+                continue
+
+            # Handle whitespace-only context lines
+            if line.startswith(" ") and not line.strip():
+                processed_result = context.validate_unchanged_line(line)
+                processed_lines.append(processed_result)
+                continue
+
+            # Handle properly formatted context lines
+            if line.startswith(" ") and line.strip():
+                processed_result = cls._process_context_line(line, context)
+                if processed_result["should_continue"]:
+                    processed_lines.extend(processed_result["lines"])
+                    continue
+                # If should_continue is False, continue to rule processing
+
             # Handle hunk headers with malformed content or incorrect counts
             if line.startswith("@@"):
-                if cls._is_malformed_hunk_header(line, context):
+                if context.is_malformed_hunk_header(line):
                     fix_result = context.fix_hunk_header(line)
                     processed_lines.extend(fix_result)
                 else:
@@ -775,7 +902,7 @@ class DiffFixer:
                 continue
 
             # Handle joined line detection and splitting
-            if cls._is_joined_line_in_context(line, context):
+            if context.is_joined_line_in_context(line):
                 split_result = context.split_joined_line_with_context(line)
                 processed_lines.extend(split_result)
                 continue
@@ -817,135 +944,6 @@ class DiffFixer:
         return file_headers, remaining_lines
 
     @staticmethod
-    def _is_malformed_hunk_header(line: str, context: DiffContext) -> bool:
-        """Check if a hunk header is malformed or has incorrect counts."""
-        if not line.startswith("@@"):
-            return False
-
-        # Check basic format issues
-        if (
-            line.strip() == "@@ ... @@"
-            or line.count("@@") != 2
-            or not re.match(r"^@@ -\d+,\d+ \+\d+,\d+ @@\s*$", line)
-        ):
-            return True
-
-        # Check if the line counts in the header match the actual diff content
-        return context.has_incorrect_line_counts(line)
-
-    @classmethod
-    def _fix_multi_hunk_diff(
-        cls,
-        diff_content: str,
-        original_content: str,
-        original_file_path: str,
-        preserve_filenames: bool = False,
-        min_context_lines: int = 1,
-    ) -> str:
-        """Fix diff with multiple hunks by processing each hunk separately."""
-        hunks = HunkManager.split_diff_into_hunks(diff_content)
-        if not hunks:
-            return "\n"
-
-        # Extract file headers from the first hunk
-        file_headers = []
-        hunk_contents = []
-        for hunk_lines in hunks:
-            hunk_file_headers = []
-            hunk_content = []
-            for line in hunk_lines:
-                if line.startswith("---") or line.startswith("+++"):
-                    hunk_file_headers.append(line)
-                else:
-                    hunk_content.append(line)
-            # Use file headers from first hunk
-            if not file_headers:
-                file_headers = hunk_file_headers
-            hunk_contents.append(hunk_content)
-
-        # Fix file headers using common processing
-        fixed_headers, _ = cls._process_file_headers(
-            file_headers, original_file_path, preserve_filenames
-        )
-
-        # Generic multi-hunk processing: fix each hunk individually, then merge with proper sequencing
-        all_fixed_hunks = []
-
-        # Process each hunk individually using common logic
-        for hunk_content in hunk_contents:
-            if not hunk_content:
-                continue
-
-            # Create context for this hunk
-            original_lines = original_content.split("\n")
-            context = DiffContext(
-                lines=hunk_content,
-                original_lines=original_lines,
-                line_index=0,
-                preserve_filenames=False,
-            )
-
-            # Use common hunk processing logic
-            hunk_lines = cls._process_hunk_content(hunk_content, context)
-
-            # Add context lines around the hunk if it has only added/deleted lines
-            hunk_with_context = cls._add_context_lines_around_hunk(
-                hunk_lines,
-                original_content,
-                min_context_lines,
-            )
-            all_fixed_hunks.append(hunk_with_context)
-
-        # Merge any overlapping hunks before final processing (only when actually needed)
-        all_fixed_hunks = HunkManager.merge_overlapping_hunks(all_fixed_hunks)
-
-        # Now merge the hunks with proper line number sequencing
-        merged_hunks = []
-        line_offset = 0  # Track cumulative line changes
-
-        for hunk_lines in all_fixed_hunks:
-            if not hunk_lines:
-                continue
-
-            # Process this hunk's lines
-            for line in hunk_lines:
-                if line.startswith("@@"):
-                    # Check if header is already properly formatted (not malformed)
-                    if DiffConfig.HUNK_HEADER_PATTERN.match(line):
-                        # Header is already properly formatted, just adjust for sequencing
-                        adjusted_header = cls._adjust_hunk_header_line_numbers(
-                            line, line_offset
-                        )
-                        merged_hunks.append(adjusted_header)
-                    else:
-                        # First recalculate the header with correct line counts
-                        corrected_header = cls._recalculate_hunk_header(
-                            hunk_lines, original_content
-                        )
-
-                        # Then adjust for proper multi-hunk sequencing
-                        adjusted_header = cls._adjust_hunk_header_line_numbers(
-                            corrected_header, line_offset
-                        )
-                        merged_hunks.append(adjusted_header)
-
-                    # Calculate how this hunk changes the line count for subsequent hunks
-                    line_offset += cls._calculate_hunk_line_offset(hunk_lines)
-                else:
-                    merged_hunks.append(line)
-
-        # Combine results
-        result_parts = fixed_headers + merged_hunks
-
-        result = "\n".join(result_parts)
-
-        # Diff patches should always end with a newline for proper git format
-        # unless the result is empty
-        if result and not result.endswith("\n"):
-            result += "\n"
-        return result
-
-    @staticmethod
     def _adjust_hunk_header_line_numbers(
         header_line: str, cumulative_offset: int
     ) -> str:
@@ -961,56 +959,19 @@ class DiffFixer:
 
         return f"@@ -{old_start},{old_count} +{adjusted_new_start},{new_count} @@"
 
-    @classmethod
-    def _calculate_hunk_line_offset(cls, hunk_lines: list[str]) -> int:
+    @staticmethod
+    def _calculate_hunk_line_offset(hunk_lines: list[str]) -> int:
         """Calculate the net line offset this hunk contributes (additions - deletions)."""
         additions = 0
         deletions = 0
 
         for line in hunk_lines:
-            if cls._is_addition_line(line):
+            if DiffConfig.is_addition_line(line):
                 additions += 1
-            elif cls._is_deletion_line(line):
+            elif DiffConfig.is_deletion_line(line):
                 deletions += 1
 
         return additions - deletions
-
-    @classmethod
-    def _diff_touches_last_line(
-        cls, diff_lines: list[str], original_lines: list[str]
-    ) -> bool:
-        """Check if the diff touches the last line or if the last line appears in diff context."""
-        if not original_lines or not diff_lines:
-            return False
-
-        # Get the actual last line of the original file
-        last_original_line = original_lines[-1] if original_lines else ""
-
-        # Check if any deletion matches the last line of the original file
-        for line in diff_lines:
-            if cls._is_deletion_line(line):
-                deletion_content = line[1:]  # Remove - prefix
-                if deletion_content == last_original_line:
-                    return True
-
-        # Check if the last line appears as context in the diff (starts with space)
-        for line in diff_lines:
-            if line.startswith(" "):
-                context_content = line[1:]  # Remove space prefix
-                if context_content == last_original_line:
-                    return True
-
-        # Check if there's a pattern where the last line is deleted and something else is added
-        has_last_line_deletion = any(
-            line.startswith("-") and line[1:] == last_original_line
-            for line in diff_lines
-        )
-
-        if has_last_line_deletion:
-            # If the last line was deleted, any addition could be modifying the last line
-            return any(cls._is_addition_line(line) for line in diff_lines)
-
-        return False
 
     @staticmethod
     def _add_missing_empty_line_additions(lines: list[str]) -> list[str]:
@@ -1067,85 +1028,6 @@ class DiffFixer:
 
         return result
 
-    @classmethod
-    def _recalculate_hunk_headers_after_postprocessing(
-        cls, lines: list[str], original_content: str
-    ) -> list[str]:
-        """Recalculate hunk headers after post-processing has potentially added more lines."""
-        if not lines:
-            return lines
-
-        result = []
-        i = 0
-
-        while i < len(lines):
-            line = lines[i]
-
-            if line.startswith("@@"):
-                # Find all lines that belong to this hunk
-                hunk_lines = [line]  # Start with the header
-                j = i + 1
-                while j < len(lines) and not lines[j].startswith("@@"):
-                    hunk_lines.append(lines[j])
-                    j += 1
-
-                # Check for specific patterns and apply targeted fixes
-                corrected_header = cls._fix_specific_hunk_patterns(
-                    hunk_lines, original_content
-                )
-                result.append(corrected_header)
-
-                # Add the rest of the hunk content
-                result.extend(hunk_lines[1:])
-
-                # Move to next hunk or end
-                i = j
-            else:
-                result.append(line)
-                i += 1
-
-        return result
-
-    @classmethod
-    def _fix_specific_hunk_patterns(
-        cls, hunk_lines: list[str], original_content: str
-    ) -> str:
-        """Apply specific fixes for known patterns like missing_leading_whitespace."""
-
-        # Check for the missing_leading_whitespace pattern:
-        # - Multiple context lines
-        # - Empty line followed by two consecutive additions (+ and +content)
-        content_lines = hunk_lines[1:]  # Skip header
-
-        # Count different line types
-        context_count = 0
-        addition_count = 0
-        has_consecutive_additions = False
-
-        for i, line in enumerate(content_lines):
-            if line.startswith(" ") or (
-                line == "" and i > 0
-            ):  # Context (including empty)
-                context_count += 1
-            elif line.startswith("+"):
-                addition_count += 1
-                # Check for consecutive additions pattern
-                if (
-                    i + 1 < len(content_lines)
-                    and content_lines[i + 1].startswith("+")
-                    and line == "+"  # First addition is empty line
-                    and content_lines[i + 1].strip()
-                ):  # Second addition has content
-                    has_consecutive_additions = True
-
-        # Pattern: multiple context, 2 additions with consecutive empty+content pattern
-        if context_count >= 5 and addition_count == 2 and has_consecutive_additions:
-            # This matches missing_leading_whitespace: adjust to @@ -2,5 +2,7 @@
-            return "@@ -2,5 +2,7 @@"
-
-        # Fallback: use existing recalculation method
-        return cls._recalculate_hunk_header(hunk_lines, original_content)
-
     @staticmethod
     def _recalculate_hunk_header(hunk_lines: list[str], original_content: str) -> str:
         """Recalculate hunk header with correct line numbers based on actual content."""
@@ -1164,25 +1046,12 @@ class DiffFixer:
             return header_line or "@@ -1,1 +1,1 @@"
 
         # Find the first recognizable content line to anchor line number calculation
-        original_lines = original_content.split("\n")
-        anchor_line_num = None
 
-        for line in content_lines:
-            if line.startswith((" ", "-")):  # Context or deletion line
-                search_content = line[1:] if line.startswith((" ", "-")) else line
-
-                # Find this content in the original file
-                for i, orig_line in enumerate(original_lines):
-                    if orig_line == search_content:
-                        anchor_line_num = i + 1  # Convert to 1-based
-                        break
-
-                if anchor_line_num:
-                    break
-
-        if not anchor_line_num:
+        result = find_hunk_location("\n".join(hunk_lines), original_content)
+        if not result or result[2] <= DiffConfig.MIN_HUNK_LOCATION_CONFIDENCE:
             # Fallback to existing header if we can't find anchor
             return header_line
+        anchor_line_num = result[0] + 1
 
         # Count lines in this hunk
         context_count = 0
@@ -1210,96 +1079,6 @@ class DiffFixer:
         return f"@@ -{old_start},{old_count} +{new_start},{new_count} @@"
 
     @classmethod
-    def _fix_single_hunk(
-        cls,
-        diff_content: str,
-        original_content: str,
-        original_file_path: str,
-        preserve_filenames: bool = False,
-        min_context_lines: int = 1,
-    ) -> str:
-        """Fix a single hunk diff - extracted from main fix_diff logic."""
-        if not diff_content.strip():
-            return "\n"
-
-        lines = diff_content.strip().split("\n")
-
-        context = DiffContext(
-            lines=lines,
-            original_lines=original_content.split("\n"),
-            line_index=0,
-            preserve_filenames=preserve_filenames,
-        )
-
-        fixed_lines = []
-        i = 0
-
-        while i < len(lines):
-            line = lines[i]
-            context.line_index = i
-
-            # Handle file headers (skip in multi-hunk mode)
-            if cls._is_file_header(line):
-                fixed_lines.append(
-                    cls._fix_file_header(line, original_file_path, preserve_filenames)
-                )
-                i += 1
-                continue
-
-            # Handle deletion lines
-            if cls._is_deletion_line(line):
-                processed_result = cls._process_deletion_line(line, context)
-                fixed_lines.append(processed_result["line"])
-                i += 1
-                continue
-
-            # Handle whitespace-only context lines
-            if line.startswith(" ") and not line.strip():
-                processed_result = cls._validate_unchanged_line(line, context)
-                fixed_lines.append(processed_result)
-                i += 1
-                continue
-
-            # Handle properly formatted context lines
-            if line.startswith(" ") and line.strip():
-                processed_result = cls._process_context_line(
-                    line, context
-                )
-                if processed_result["should_continue"]:
-                    fixed_lines.extend(processed_result["lines"])
-                    i += 1
-                    continue
-                # If should_continue is False, continue to rule processing
-
-            # Try common hunk processing for cases not handled by specialized logic
-            # Use common logic for joined lines and missing prefixes
-            fixed_lines.extend(cls._process_hunk_content([line], context))
-
-            i += 1
-
-        # Post-process to add missing empty line additions before content additions
-        # This handles cases like the missing_leading_whitespace fixture
-        fixed_lines = cls._add_context_lines_around_hunk(
-            fixed_lines,
-            original_content,
-            min_context_lines,
-        )
-        fixed_lines = cls._add_missing_empty_line_additions(fixed_lines)
-
-        # Recalculate hunk header after post-processing if needed
-        fixed_lines = cls._recalculate_hunk_headers_after_postprocessing(
-            fixed_lines, original_content
-        )
-
-        result = "\n".join(fixed_lines)
-
-        # Diff patches should always end with a newline for proper git format
-        # unless the result is empty
-        if result and not result.endswith("\n"):
-            result += "\n"
-        return result
-
-    @classmethod
     def run(
         cls,
         diff_content: str,
@@ -1313,44 +1092,87 @@ class DiffFixer:
         Uses unified processing logic but maintains compatibility by routing
         single-hunk diffs through optimized path.
         """
+        if not diff_content.strip():
+            return "\n"
+
         hunks = HunkManager.split_diff_into_hunks(diff_content)
         if not hunks:
             return "\n"
 
-        # Check if this is a multi-hunk diff
-        if len(hunks) > 1:
-            # Process multiple hunks using the specialized approach
-            return cls._fix_multi_hunk_diff(
-                diff_content,
+        # Fix file headers using common processing
+        fixed_headers, _ = cls._process_file_headers(
+            diff_content.strip().split("\n"), original_file_path, preserve_filenames
+        )
+
+        # Generic multi-hunk processing: fix each hunk individually, then merge with proper sequencing
+        all_fixed_hunks = []
+
+        # Process each hunk individually using common logic
+        for hunk_content in hunks:
+            if not hunk_content:
+                continue
+
+            context = DiffContext(
+                lines=hunk_content,
+                original_lines=original_content.split("\n"),
+                line_index=0,
+                preserve_filenames=preserve_filenames,
+            )
+
+            hunk_lines = cls._process_hunk_content(context)
+            hunk_lines = cls._add_context_lines_around_hunk(
+                hunk_lines,
                 original_content,
-                original_file_path,
-                preserve_filenames,
                 min_context_lines,
             )
-        else:
-            # Single hunk - use the optimized single-hunk processor for compatibility
-            return cls._fix_single_hunk(
-                diff_content,
-                original_content,
-                original_file_path,
-                preserve_filenames,
-                min_context_lines,
-            )
+            hunk_lines = cls._add_missing_empty_line_additions(hunk_lines)
+
+            all_fixed_hunks.append(hunk_lines)
+
+        all_fixed_hunks = HunkManager.merge_overlapping_hunks(all_fixed_hunks)
+
+        fixed_hunks = []
+        line_offset = 0
+
+        for hunk_lines in all_fixed_hunks:
+            if not hunk_lines:
+                continue
+
+            # Process this hunk's lines
+            for line in hunk_lines:
+                if line.startswith("@@"):
+                    # Check if header is already properly formatted (not malformed)
+                    # First recalculate the header with correct line counts
+                    corrected_header = cls._recalculate_hunk_header(
+                        hunk_lines, original_content
+                    )
+
+                    # Then adjust for proper multi-hunk sequencing
+                    adjusted_header = cls._adjust_hunk_header_line_numbers(
+                        corrected_header, line_offset
+                    )
+                    fixed_hunks.append(adjusted_header)
+
+                    # Calculate how this hunk changes the line count for subsequent hunks
+                    line_offset += cls._calculate_hunk_line_offset(hunk_lines)
+                else:
+                    fixed_hunks.append(line)
+
+        # Combine results
+        fixed_lines = fixed_headers + fixed_hunks
+
+        result = "\n".join(fixed_lines)
+
+        # Diff patches should always end with a newline for proper git format
+        # unless the result is empty
+        if result and not result.endswith("\n"):
+            result += "\n"
+        return result
 
     @staticmethod
     def _is_file_header(line: str) -> bool:
         """Check if a line is a file header."""
         return line.startswith(("---", "+++"))
-
-    @staticmethod
-    def _is_addition_line(line: str) -> bool:
-        """Check if a line is a deletion line."""
-        return line.startswith("+") and not line.startswith("+++")
-
-    @staticmethod
-    def _is_deletion_line(line: str) -> bool:
-        """Check if a line is a deletion line."""
-        return line.startswith("-") and not line.startswith("---")
 
     @staticmethod
     def _process_deletion_line(line: str, context: DiffContext) -> dict:
@@ -1410,7 +1232,7 @@ class DiffFixer:
                 "lines": lines_to_add,
                 "line_index": current_original_index,
             }
-        elif cls._is_joined_line_in_context(line, context):
+        elif context.is_joined_line_in_context(line):
             # Process as potential joined line instead - continue to rule processing
             return {
                 "should_continue": False,
@@ -1468,84 +1290,6 @@ class DiffFixer:
             return f"--- a/{filename}"
         else:
             return f"+++ b/{filename}"
-
-    @classmethod
-    def _is_joined_line_in_context(cls, line: str, context: DiffContext) -> bool:
-        """Check if line appears to be joined by using only original file structure as context."""
-        if not line.strip() or line.startswith(("@@",)):
-            return False
-
-        # Strip diff prefixes
-        line_content = line
-        if line.startswith((" ", "+", "-")):
-            line_content = line[1:]
-
-        # Skip empty content after prefix removal
-        if not line_content.strip():
-            return False
-
-        # Generic approach: A line is likely joined if:
-        # 1. It doesn't exist as-is in the original file, AND
-        # 2. It can be split into parts that DO exist in the original file
-
-        # First check if the line exists as-is in original
-        exact_match = context.find_exact_line_match(line_content)
-        if exact_match:
-            return False  # Line exists as-is, no need to split
-
-        # Check if we can split this line into parts that exist in original
-        return cls._would_split_improve_match(line, context)
-
-    @staticmethod
-    def _would_split_improve_match(line: str, context: DiffContext) -> bool:
-        """Check if splitting a line would better match the original file structure using strict matching."""
-        # First check if the exact line (including indentation) exists in the original
-        clean_line = line
-        if line.startswith((" ", "+", "-")):
-            clean_line = line[1:]
-
-        exact_match = context.find_exact_line_match(clean_line)
-        if exact_match:
-            return False  # Don't split if exact match exists
-
-        # Try different split strategies and see if parts match exactly
-        potential_splits = context.get_potential_splits(line)
-
-        for split_parts in potential_splits:
-            # Check if split parts individually exist exactly in original
-            exact_matches = 0
-            for part in split_parts:
-                exact_match = context.find_exact_line_match(part)
-                if exact_match:
-                    exact_matches += 1
-
-            # Only split if we have exact matches for multiple parts
-            if exact_matches > 1:
-                return True
-
-        return False
-
-    @staticmethod
-    def _validate_unchanged_line(line: str, context: DiffContext) -> str:
-        """Validate that an unchanged line exists in the original file with exact indentation."""
-        if not line.startswith(" "):
-            return line
-
-        content = line[1:]  # Remove the space prefix
-        match = context.find_exact_line_match(content)
-
-        if match:
-            # Line exists in original with exact indentation - keep as unchanged
-            return line
-        else:
-            # Try to find the closest match and correct indentation
-            corrected_line = context.find_similar_match(content)
-            if corrected_line is not None:
-                # corrected_line already has proper indentation from original, just add diff prefix
-                return " " + corrected_line
-            else:
-                # No match found - might be an addition instead
-                return "+" + content
 
     @classmethod
     def _reconcile_lines_from_anchor(
