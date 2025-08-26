@@ -493,9 +493,12 @@ line_below"""
             "         )except Exception as e:"
         )
         # Original has these lines with specific indentation
-        original_content = (
-            "        console.print()\n        )\n\n    except Exception as e:\n"
+        original_content = """\
+        console.print()
         )
+
+    except Exception as e:
+"""
 
         result = self.fixer.run(diff_content, original_content, "test.py")
         lines = result.strip().split("\n")

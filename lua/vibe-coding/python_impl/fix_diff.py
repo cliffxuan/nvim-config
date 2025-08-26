@@ -108,7 +108,7 @@ class DiffContext:
     def has_incorrect_line_counts(self, header_line: str) -> bool:
         """Check if the line counts in the header match the actual diff content."""
         # Parse the current header counts
-        match = re.match(r"^@@ -(\d+),(\d+) \+(\d+),(\d+) @@", header_line)
+        match = re.match(DiffConfig.HUNK_HEADER_PATTERN, header_line)
         if not match:
             return True  # Can't parse, treat as malformed
 
@@ -147,7 +147,7 @@ class DiffContext:
 
         # Strip diff prefix if present
         clean_line = line
-        if line.startswith((" ", "+", "-")):
+        if line.startswith(DiffConfig.DIFF_PREFIXES):
             clean_line = line[1:]
 
         if not clean_line.strip():
@@ -267,7 +267,7 @@ class DiffContext:
 
                     # Clean both lines for comparison
                     clean_diff_line = diff_line
-                    if diff_line.startswith((" ", "+", "-")):
+                    if diff_line.startswith(DiffConfig.DIFF_PREFIXES):
                         clean_diff_line = diff_line[1:]
 
                     if clean_diff_line == orig_line:
@@ -302,7 +302,7 @@ class DiffContext:
 
     def add_appropriate_prefix(self, line: str) -> str:
         """Determine and add appropriate diff prefix based on strict original file matching."""
-        if line.startswith((" ", "+", "-")):
+        if line.startswith(DiffConfig.DIFF_PREFIXES):
             return line
 
         if not line.strip():
@@ -404,40 +404,6 @@ class DiffContext:
                     # Calculate line counts based on actual diff content
                     return self.calculate_hunk_header_from_anchor(start_line)
 
-        # Fallback: try to find any recognizable content for positioning
-        candidates = []
-
-        for i in range(self.line_index + 1, min(self.line_index + 10, len(self.lines))):
-            if i >= len(self.lines):
-                break
-
-            line = self.lines[i]
-            if not line.strip():
-                continue
-
-            # Extract searchable content
-            search_text = line
-            if line.startswith((" ", "+", "-")):
-                search_text = line[1:]
-
-            if not search_text.strip():
-                continue
-
-            # Find the most unique/specific lines for better positioning
-            for j, orig_line in enumerate(self.original_lines):
-                if orig_line == search_text:
-                    # Store candidate with specificity score (longer lines are more unique)
-                    specificity = len(search_text.strip())
-                    candidates.append((specificity, j + 1))  # Store 1-based line number
-                    break
-
-        if candidates:
-            # Choose the most specific (longest) match for better accuracy
-            candidates.sort(key=lambda x: x[0], reverse=True)
-            matched_line_num = candidates[0][1]  # 1-based
-
-            return self.calculate_hunk_header_from_anchor(matched_line_num)
-
         # Ultimate fallback: create header based on available context lines
         remaining_lines = (
             self.lines[self.line_index + 1 :]
@@ -482,7 +448,7 @@ class DiffContext:
 
     def fix_hunk_header(self, line: str) -> list[str]:
         """Fix malformed hunk headers."""
-        if line.strip() == "@@ ... @@":
+        if line.strip() == DiffConfig.MALFORMED_HEADER_SIMPLE:
             # Infer line numbers from context
             return [self.infer_hunk_header()]
 
@@ -604,7 +570,7 @@ class DiffContext:
         """Check if splitting a line would better match the original file structure using strict matching."""
         # First check if the exact line (including indentation) exists in the original
         clean_line = line
-        if line.startswith((" ", "+", "-")):
+        if line.startswith(DiffConfig.DIFF_PREFIXES):
             clean_line = line[1:]
 
         exact_match = self.find_exact_line_match(clean_line)
@@ -635,7 +601,7 @@ class DiffContext:
 
         # Strip diff prefixes
         line_content = line
-        if line.startswith((" ", "+", "-")):
+        if line.startswith(DiffConfig.DIFF_PREFIXES):
             line_content = line[1:]
 
         # Skip empty content after prefix removal
@@ -682,7 +648,7 @@ class DiffContext:
 
         # Check basic format issues
         if (
-            line.strip() == "@@ ... @@"
+            line.strip() == DiffConfig.MALFORMED_HEADER_SIMPLE
             or line.count("@@") != 2
             or not re.match(r"^@@ -\d+,\d+ \+\d+,\d+ @@\s*$", line)
         ):
@@ -802,7 +768,7 @@ class DiffContext:
                 # If should_continue is False, continue to rule processing
 
             # Handle hunk headers with malformed content or incorrect counts
-            if line.startswith("@@"):
+            if line.startswith(DiffConfig.HUNK_PREFIX):
                 if self.is_malformed_hunk_header(line):
                     fix_result = self.fix_hunk_header(line)
                     processed_lines.extend(fix_result)
@@ -818,7 +784,9 @@ class DiffContext:
 
             # Handle missing diff prefixes
             if line.strip() and not line.startswith(
-                ("@@", "---", "+++", " ", "+", "-")
+                (DiffConfig.HUNK_PREFIX,)
+                + DiffConfig.DIFF_PREFIXES
+                + DiffConfig.FILE_PREFIXES
             ):
                 prefixed_line = self.add_appropriate_prefix(line)
                 processed_lines.append(prefixed_line)
@@ -840,7 +808,7 @@ class HunkManager:
             return None
 
         for line in hunk_lines:
-            if line.startswith("@@"):
+            if line.startswith(DiffConfig.HUNK_PREFIX):
                 match = DiffConfig.HUNK_HEADER_PATTERN.match(line)
                 if match:
                     start_line, line_count = int(match.group(1)), int(match.group(2))
@@ -986,7 +954,7 @@ class HunkManager:
         # Process hunks
         while i < len(lines):
             line = lines[i]
-            if line.startswith("@@"):
+            if line.startswith(DiffConfig.HUNK_PREFIX):
                 # Start of new hunk
                 if current_hunk:
                     hunks.append(file_headers + current_hunk)
@@ -1033,7 +1001,7 @@ class DiffFixer:
         header_line: str, cumulative_offset: int
     ) -> str:
         """Adjust hunk header line numbers based on cumulative offset from previous hunks."""
-        match = re.match(r"^@@ -(\d+),(\d+) \+(\d+),(\d+) @@", header_line)
+        match = re.match(DiffConfig.HUNK_HEADER_PATTERN, header_line)
         if not match:
             return header_line
 
@@ -1122,7 +1090,7 @@ class DiffFixer:
         content_lines = []
 
         for line in hunk_lines:
-            if line.startswith("@@"):
+            if line.startswith(DiffConfig.HUNK_PREFIX):
                 header_line = line
             else:
                 content_lines.append(line)
@@ -1225,7 +1193,7 @@ class DiffFixer:
 
             # Process this hunk's lines
             for line in hunk_lines:
-                if line.startswith("@@"):
+                if line.startswith(DiffConfig.HUNK_PREFIX):
                     # Check if header is already properly formatted (not malformed)
                     # First recalculate the header with correct line counts
                     corrected_header = cls._recalculate_hunk_header(
@@ -1623,7 +1591,7 @@ class DiffFixer:
         # Find the header line
         header_idx = None
         for i, line in enumerate(hunk_lines):
-            if line.startswith("@@"):
+            if line.startswith(DiffConfig.HUNK_PREFIX):
                 header_idx = i
                 break
 
@@ -1638,7 +1606,7 @@ class DiffFixer:
         start_line = None
         original_lines = original_content.split("\n")
 
-        if header_line.strip() == "@@ ... @@":
+        if header_line.strip() == DiffConfig.MALFORMED_HEADER_SIMPLE:
             # Find the first deletion line to determine the start position
             # For multi-hunk diffs, use the first deletions line we can find
             start_line = None
@@ -1672,7 +1640,10 @@ class DiffFixer:
         # Don't add context lines for hunks that start at line 1 (beginning of file)
         # as there's no ambiguity and context may not be helpful, but only for non-malformed headers
         # since malformed headers might have wrong line numbers that need correction
-        if start_line <= 1 and header_line.strip() != "@@ ... @@":
+        if (
+            start_line <= 1
+            and header_line.strip() != DiffConfig.MALFORMED_HEADER_SIMPLE
+        ):
             return hunk_lines
 
         # Add context lines before the hunk content
