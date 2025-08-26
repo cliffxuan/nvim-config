@@ -918,7 +918,7 @@ class TestCommonLogicExtraction:
             preserve_filenames=False,
         )
 
-        result = self.fixer._process_hunk_content(context)
+        result = context.process_hunk_content()
 
         # Should split into separate lines with correct indentation
         assert "        )" in str(result)  # First part with 8 spaces
@@ -940,7 +940,7 @@ class TestCommonLogicExtraction:
             preserve_filenames=False,
         )
 
-        result = self.fixer._process_hunk_content(context)
+        result = context.process_hunk_content()
         result_str = "\n".join(result)
 
         # Should infer that 'existing line' is context (exists in original)
@@ -960,7 +960,7 @@ class TestCommonLogicExtraction:
             preserve_filenames=False,
         )
 
-        result = self.fixer._process_hunk_content(context)
+        result = context.process_hunk_content()
         result_str = "\n".join(result)
 
         # Should fix the malformed header

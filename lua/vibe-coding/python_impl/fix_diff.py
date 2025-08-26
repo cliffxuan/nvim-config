@@ -772,6 +772,63 @@ class DiffContext:
                     "line_index": None,
                 }
 
+    def process_hunk_content(self) -> list[str]:
+        """Common hunk content processing logic shared between single and multi-hunk processing."""
+        processed_lines = []
+
+        for i, line in enumerate(self.lines):
+            self.line_index = i
+            if DiffConfig.is_file_header(line):
+                continue
+
+            # Handle deletion lines
+            if DiffConfig.is_deletion_line(line):
+                processed_result = self.process_deletion_line(line)
+                processed_lines.append(processed_result["line"])
+                continue
+
+            # Handle whitespace-only self lines
+            if line.startswith(" ") and not line.strip():
+                processed_result = self.validate_unchanged_line(line)
+                processed_lines.append(processed_result)
+                continue
+
+            # Handle properly formatted self lines
+            if line.startswith(" ") and line.strip():
+                processed_result = self.process_context_line(line)
+                if processed_result["should_continue"]:
+                    processed_lines.extend(processed_result["lines"])
+                    continue
+                # If should_continue is False, continue to rule processing
+
+            # Handle hunk headers with malformed content or incorrect counts
+            if line.startswith("@@"):
+                if self.is_malformed_hunk_header(line):
+                    fix_result = self.fix_hunk_header(line)
+                    processed_lines.extend(fix_result)
+                else:
+                    processed_lines.append(line)
+                continue
+
+            # Handle joined line detection and splitting
+            if self.is_joined_line_in_context(line):
+                split_result = self.split_joined_line_with_context(line)
+                processed_lines.extend(split_result)
+                continue
+
+            # Handle missing diff prefixes
+            if line.strip() and not line.startswith(
+                ("@@", "---", "+++", " ", "+", "-")
+            ):
+                prefixed_line = self.add_appropriate_prefix(line)
+                processed_lines.append(prefixed_line)
+                continue
+
+            # Keep other lines as-is
+            processed_lines.append(line)
+
+        return processed_lines
+
 
 class HunkManager:
     """Unified manager for hunk operations including overlap detection and merging."""
@@ -947,64 +1004,6 @@ class HunkManager:
 
 class DiffFixer:
     """Main diff fixer orchestrating all components with improved architecture."""
-
-    @staticmethod
-    def _process_hunk_content(context: DiffContext) -> list[str]:
-        """Common hunk content processing logic shared between single and multi-hunk processing."""
-        processed_lines = []
-
-        for i, line in enumerate(context.lines):
-            context.line_index = i
-            if DiffConfig.is_file_header(line):
-                continue
-
-            # Handle deletion lines
-            if DiffConfig.is_deletion_line(line):
-                processed_result = context.process_deletion_line(line)
-                processed_lines.append(processed_result["line"])
-                continue
-
-            # Handle whitespace-only context lines
-            if line.startswith(" ") and not line.strip():
-                processed_result = context.validate_unchanged_line(line)
-                processed_lines.append(processed_result)
-                continue
-
-            # Handle properly formatted context lines
-            if line.startswith(" ") and line.strip():
-                processed_result = context.process_context_line(line)
-                if processed_result["should_continue"]:
-                    processed_lines.extend(processed_result["lines"])
-                    continue
-                # If should_continue is False, continue to rule processing
-
-            # Handle hunk headers with malformed content or incorrect counts
-            if line.startswith("@@"):
-                if context.is_malformed_hunk_header(line):
-                    fix_result = context.fix_hunk_header(line)
-                    processed_lines.extend(fix_result)
-                else:
-                    processed_lines.append(line)
-                continue
-
-            # Handle joined line detection and splitting
-            if context.is_joined_line_in_context(line):
-                split_result = context.split_joined_line_with_context(line)
-                processed_lines.extend(split_result)
-                continue
-
-            # Handle missing diff prefixes
-            if line.strip() and not line.startswith(
-                ("@@", "---", "+++", " ", "+", "-")
-            ):
-                prefixed_line = context.add_appropriate_prefix(line)
-                processed_lines.append(prefixed_line)
-                continue
-
-            # Keep other lines as-is
-            processed_lines.append(line)
-
-        return processed_lines
 
     @classmethod
     def _process_file_headers(
@@ -1205,7 +1204,7 @@ class DiffFixer:
                 preserve_filenames=preserve_filenames,
             )
 
-            hunk_lines = cls._process_hunk_content(context)
+            hunk_lines = context.process_hunk_content()
             hunk_lines = cls._add_context_lines_around_hunk(
                 hunk_lines,
                 original_content,
