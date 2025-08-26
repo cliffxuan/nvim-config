@@ -86,6 +86,11 @@ class DiffConfig:
         """Check if a line is a deletion line."""
         return line.startswith("+") and not line.startswith("+++")
 
+    @staticmethod
+    def is_file_header(line: str) -> bool:
+        """Check if a line is a file header."""
+        return line.startswith(DiffConfig.FILE_PREFIXES)
+
 
 @dataclass
 class DiffContext:
@@ -686,6 +691,87 @@ class DiffContext:
         # Check if the line counts in the header match the actual diff content
         return self.has_incorrect_line_counts(line)
 
+    def process_deletion_line(self, line: str) -> dict:
+        """Process a deletion line and return the processed line with metadata.
+
+        Returns:
+            dict: Contains 'line' (processed line) and 'line_index' (original file index or None)
+        """
+        deletion_content = line[1:]  # Remove - prefix
+
+        # Find exact match in original file
+        exact_match = self.find_exact_line_match(deletion_content)
+
+        if exact_match:
+            # Valid deletion - line exists in original with correct indentation
+            return {
+                "line": line,  # Keep as-is
+                "line_index": exact_match[0],  # Return the matched index
+            }
+        else:
+            # Try to find similar line with corrected indentation
+            corrected_line = self.find_similar_match(deletion_content)
+            if corrected_line:
+                return {
+                    "line": "-" + corrected_line,
+                    "line_index": None,  # Don't update index for corrected lines
+                }
+            else:
+                # No match found - keep original but don't update index
+                return {"line": line, "line_index": None}
+
+    def process_context_line(self, line: str) -> dict:
+        """Process a context line (space prefix + content).
+
+        Returns:
+            dict: Contains 'should_continue', 'lines', 'line_index'
+        """
+        content_after_prefix = line[1:]
+        exact_match = self.find_exact_line_match(content_after_prefix)
+
+        if exact_match:
+            # Only check for missing context if we haven't just processed a deletion
+            # and we're dealing with import-like patterns
+            current_original_index = exact_match[0]
+            lines_to_add = []
+
+            # This is a properly formatted unchanged line - keep as-is
+            lines_to_add.append(line)
+
+            return {
+                "should_continue": True,
+                "lines": lines_to_add,
+                "line_index": current_original_index,
+            }
+        elif self.is_joined_line_in_context(line):
+            # Process as potential joined line instead - continue to rule processing
+            return {
+                "should_continue": False,
+                "lines": [],
+                "line_index": None,
+            }
+        else:
+            # Line starts with space but doesn't match - this might be a line
+            # missing a prefix where the content happens to start with spaces.
+            # Check if the line as-is (without stripping) exists in original
+            whole_line_match = self.find_exact_line_match(line)
+            if whole_line_match:
+                # The whole line (including leading spaces) exists in original
+                # This is content missing its diff prefix - add space prefix
+                return {
+                    "should_continue": True,
+                    "lines": [" " + line],
+                    "line_index": None,
+                }
+            else:
+                # Neither interpretation works - this is likely a malformed context line
+                # that should be an addition instead
+                return {
+                    "should_continue": True,
+                    "lines": ["+" + content_after_prefix],
+                    "line_index": None,
+                }
+
 
 class HunkManager:
     """Unified manager for hunk operations including overlap detection and merging."""
@@ -862,19 +948,19 @@ class HunkManager:
 class DiffFixer:
     """Main diff fixer orchestrating all components with improved architecture."""
 
-    @classmethod
-    def _process_hunk_content(cls, context: DiffContext) -> list[str]:
+    @staticmethod
+    def _process_hunk_content(context: DiffContext) -> list[str]:
         """Common hunk content processing logic shared between single and multi-hunk processing."""
         processed_lines = []
 
         for i, line in enumerate(context.lines):
             context.line_index = i
-            if cls._is_file_header(line):
+            if DiffConfig.is_file_header(line):
                 continue
 
             # Handle deletion lines
             if DiffConfig.is_deletion_line(line):
-                processed_result = cls._process_deletion_line(line, context)
+                processed_result = context.process_deletion_line(line)
                 processed_lines.append(processed_result["line"])
                 continue
 
@@ -886,7 +972,7 @@ class DiffFixer:
 
             # Handle properly formatted context lines
             if line.startswith(" ") and line.strip():
-                processed_result = cls._process_context_line(line, context)
+                processed_result = context.process_context_line(line)
                 if processed_result["should_continue"]:
                     processed_lines.extend(processed_result["lines"])
                     continue
@@ -933,7 +1019,7 @@ class DiffFixer:
         remaining_lines = []
 
         for line in lines:
-            if cls._is_file_header(line):
+            if DiffConfig.is_file_header(line):
                 fixed_header = cls._fix_file_header(
                     line, original_file_path, preserve_filenames
                 )
@@ -1168,98 +1254,6 @@ class DiffFixer:
         if result and not result.endswith("\n"):
             result += "\n"
         return result
-
-    @staticmethod
-    def _is_file_header(line: str) -> bool:
-        """Check if a line is a file header."""
-        return line.startswith(("---", "+++"))
-
-    @staticmethod
-    def _process_deletion_line(line: str, context: DiffContext) -> dict:
-        """Process a deletion line and return the processed line with metadata.
-
-        Returns:
-            dict: Contains 'line' (processed line) and 'line_index' (original file index or None)
-        """
-        deletion_content = line[1:]  # Remove - prefix
-
-        # Find exact match in original file
-        exact_match = context.find_exact_line_match(deletion_content)
-
-        if exact_match:
-            # Valid deletion - line exists in original with correct indentation
-            return {
-                "line": line,  # Keep as-is
-                "line_index": exact_match[0],  # Return the matched index
-            }
-        else:
-            # Try to find similar line with corrected indentation
-            corrected_line = context.find_similar_match(deletion_content)
-            if corrected_line:
-                return {
-                    "line": "-" + corrected_line,
-                    "line_index": None,  # Don't update index for corrected lines
-                }
-            else:
-                # No match found - keep original but don't update index
-                return {"line": line, "line_index": None}
-
-    @classmethod
-    def _process_context_line(
-        cls,
-        line: str,
-        context: DiffContext,
-    ) -> dict:
-        """Process a context line (space prefix + content).
-
-        Returns:
-            dict: Contains 'should_continue', 'lines', 'line_index'
-        """
-        content_after_prefix = line[1:]
-        exact_match = context.find_exact_line_match(content_after_prefix)
-
-        if exact_match:
-            # Only check for missing context if we haven't just processed a deletion
-            # and we're dealing with import-like patterns
-            current_original_index = exact_match[0]
-            lines_to_add = []
-
-            # This is a properly formatted unchanged line - keep as-is
-            lines_to_add.append(line)
-
-            return {
-                "should_continue": True,
-                "lines": lines_to_add,
-                "line_index": current_original_index,
-            }
-        elif context.is_joined_line_in_context(line):
-            # Process as potential joined line instead - continue to rule processing
-            return {
-                "should_continue": False,
-                "lines": [],
-                "line_index": None,
-            }
-        else:
-            # Line starts with space but doesn't match - this might be a line
-            # missing a prefix where the content happens to start with spaces.
-            # Check if the line as-is (without stripping) exists in original
-            whole_line_match = context.find_exact_line_match(line)
-            if whole_line_match:
-                # The whole line (including leading spaces) exists in original
-                # This is content missing its diff prefix - add space prefix
-                return {
-                    "should_continue": True,
-                    "lines": [" " + line],
-                    "line_index": None,
-                }
-            else:
-                # Neither interpretation works - this is likely a malformed context line
-                # that should be an addition instead
-                return {
-                    "should_continue": True,
-                    "lines": ["+" + content_after_prefix],
-                    "line_index": None,
-                }
 
     @staticmethod
     def _fix_file_header(
