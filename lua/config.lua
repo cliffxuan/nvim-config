@@ -34,18 +34,28 @@ local on_attach = function(client, bufnr)
 end
 
 local lsp_flags = {
-  -- This is the default in Nvim 0.7+
   debounce_text_changes = 150,
 }
-require('lspconfig')['pyright'].setup {
+
+local lspconfig = vim.lsp.config
+
+-- Enable language servers
+vim.lsp.enable 'pyright'
+vim.lsp.enable 'vtsls'
+vim.lsp.enable 'lua_ls'
+
+-- Setup pyright
+vim.lsp.config('pyright', {
   on_attach = on_attach,
   flags = lsp_flags,
-}
-require('lspconfig')['vtsls'].setup {
+})
+-- Setup vtsls
+vim.lsp.config('vtsls', {
   on_attach = on_attach,
   flags = lsp_flags,
-}
-require('lspconfig')['lua_ls'].setup {
+})
+-- Setup lua_ls with settings
+vim.lsp.config('lua_ls', {
   on_attach = on_attach,
   settings = {
     Lua = {
@@ -57,7 +67,7 @@ require('lspconfig')['lua_ls'].setup {
       },
     },
   },
-}
+})
 
 local cmp = require 'cmp'
 cmp.setup {
