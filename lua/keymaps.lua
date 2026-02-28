@@ -109,6 +109,7 @@ keymap('n', 'K', ':hide<CR>', { noremap = true })
 
 -- leader
 require('which-key').add {
+  { '<leader>a', group = 'AI' },
   { '<leader>d', group = 'Vibe' },
   { '<leader>j', group = 'Text Search' },
   { '<leader>n', group = 'Open file' },
@@ -118,6 +119,15 @@ require('which-key').add {
   { '<leader>k', group = 'Change directory' },
   { '<leader>h', group = 'History' },
 }
+
+-- AI (codecompanion)
+keymap('n', '<leader>aa', '<cmd>CodeCompanionChat Toggle<CR>', { desc = 'Toggle chat', noremap = true })
+keymap('v', '<leader>aa', '<cmd>CodeCompanionChat Toggle<CR>', { desc = 'Toggle chat', noremap = true })
+keymap('n', '<leader>ai', '<cmd>CodeCompanion<CR>', { desc = 'Inline prompt', noremap = true })
+keymap('v', '<leader>ai', '<cmd>CodeCompanion<CR>', { desc = 'Inline prompt', noremap = true })
+keymap('v', '<leader>ae', '<cmd>CodeCompanionChat Add<CR>', { desc = 'Add selection to chat', noremap = true })
+keymap('n', '<leader>ap', '<cmd>CodeCompanionActions<CR>', { desc = 'Action palette', noremap = true })
+keymap('v', '<leader>ap', '<cmd>CodeCompanionActions<CR>', { desc = 'Action palette', noremap = true })
 
 keymap('n', '<leader>jj', search_word_under_cursor, { desc = 'Search word under the cursor', noremap = true })
 keymap('n', '<leader>j ', telescope.live_grep, { desc = 'Live search', noremap = true })
