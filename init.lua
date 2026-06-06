@@ -289,7 +289,6 @@ vim.cmd [[
 \ctrl-u:preview-half-page-up,ctrl-d:preview-half-page-down,
 \shift-up:preview-top,shift-down:preview-bottom"
   let g:fzf_layout = { 'window': { 'width': 0.98, 'height': 0.8, 'highlight': 'Todo', 'border': 'sharp' } }
-  let g:indentLine_setColors = 0
   let g:terraform_align=1
 
   " python provider uses pynvim specific virtualenv
