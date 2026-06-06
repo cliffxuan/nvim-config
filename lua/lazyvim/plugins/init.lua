@@ -65,7 +65,6 @@ return {
   'rebelot/kanagawa.nvim',
   'catppuccin/nvim',
 
-  'SirVer/ultisnips',
   'neovim/nvim-lspconfig',
   'nvim-lua/plenary.nvim',
   -- language specific

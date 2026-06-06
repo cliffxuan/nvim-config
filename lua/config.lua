@@ -67,75 +67,13 @@ vim.lsp.config('lua_ls', {
   },
 })
 
-local cmp = require 'cmp'
-cmp.setup {
-  window = {
-    completion = cmp.config.window.bordered(),
-    documentation = cmp.config.window.bordered(),
-  },
-  snippet = {
-    -- this is required even if snippet is not enabled! otherwise rust-tools fail.
-    expand = function(args)
-      vim.fn['UltiSnips#Anon'](args.body)
-    end,
-  },
-  mapping = cmp.mapping.preset.insert {
-    ['<C-k>'] = cmp.mapping.select_prev_item(),
-    ['<C-j>'] = cmp.mapping.select_next_item(),
-    ['<C-p>'] = cmp.mapping.select_prev_item(),
-    ['<C-n>'] = cmp.mapping.select_next_item(),
-    ['<S-Tab>'] = cmp.mapping.select_prev_item(),
-    ['<Tab>'] = cmp.mapping.select_next_item(),
-    ['<C-[>'] = cmp.mapping.scroll_docs(-4),
-    ['<C-]>'] = cmp.mapping.scroll_docs(4),
-    ['<C-f>'] = cmp.mapping.scroll_docs(-4),
-    ['<C-d>'] = cmp.mapping.scroll_docs(4),
-    ['<C-space>'] = cmp.mapping.complete(),
-    -- ['<Esc>'] = cmp.mapping.abort(),
-    ['<C-e>'] = cmp.mapping.abort(),
-    ['<CR>'] = cmp.mapping.confirm {
-      behavior = cmp.ConfirmBehavior.Insert,
-      select = true,
-    }, -- Accept currently selected item. Set `select` to `false` to only confirm explicitly selected items.
-  },
-  sources = cmp.config.sources({
-    { name = 'ultisnips' },
-  }, {
-    { name = 'nvim_lsp' },
-  }, {
-    { name = 'buffer' },
-  }),
-}
-
--- Use buffer source for `/` and `?` (if you enabled `native_menu`, this won't work anymore).
--- cmp.setup.cmdline({ '/', '?' }, {
---     -- mapping = cmp.mapping.preset.cmdline(),
---     mapping = {
---       ['<C-p>'] = cmp.mapping(cmp.mapping.select_prev_item({ behavior = cmp.SelectBehavior.Insert }), { 'i', 'c' }),
---       ['<C-d>'] = cmp.mapping(cmp.mapping.scroll_docs(-4), { 'i', 'c' }),
---       ['<C-f>'] = cmp.mapping(cmp.mapping.scroll_docs(4), { 'i', 'c' }),
---       ['<C-Space>'] = cmp.mapping(cmp.mapping.complete(), { 'i', 'c' }),
---       ['<C-e>'] = cmp.mapping(cmp.mapping.confirm({ behavior = cmp.ConfirmBehavior.Replace, select = true }), { 'i', 'c' }),
---       ['<CR>'] = cmp.mapping.confirm({
---           behavior = cmp.ConfirmBehavior.Replace,
---           select = false,
---         }),
---       ['<Tab>'] = cmp.mapping(cmp.mapping.select_next_item({ behavior = cmp.SelectBehavior.Insert }), { 'i', 'c' }),
---       ['<S-Tab>'] = cmp.mapping(cmp.mapping.select_prev_item({ behavior = cmp.SelectBehavior.Insert }), { 'i', 'c' }),
---     },
---     sources = {
---       { name = 'buffer' }
---     }
---   })
-
--- Use cmdline & path source for ':' (if you enabled `native_menu`, this won't work anymore).
--- cmp.setup.cmdline(':', {
---   mapping = cmp.mapping.preset.cmdline(),
---   sources = cmp.config.sources({
---     { name = 'path' }
---   }, {
---     { name = 'cmdline' }
---   })
--- })
+-- Advertise blink.cmp's completion capabilities to all language servers.
+-- (pcall so a first run before blink's binary is built doesn't break config.)
+local ok_blink, blink = pcall(require, 'blink.cmp')
+if ok_blink then
+  vim.lsp.config('*', {
+    capabilities = blink.get_lsp_capabilities(),
+  })
+end
 
 -- vim: ts=2 sts=2 sw=2 et

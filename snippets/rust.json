@@ -1,0 +1,13 @@
+{
+  "rust main boilerplate": {
+    "prefix": "ko",
+    "body": [
+      "#![allow(unused)]",
+      "",
+      "fn main() {",
+      "    println!(\"hello world!\");",
+      "}"
+    ],
+    "description": "rust main boilerplate"
+  }
+}

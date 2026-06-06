@@ -1,0 +1,9 @@
+{
+  "Opening tag": {
+    "prefix": "<?",
+    "body": [
+      "<?php"
+    ],
+    "description": "Opening tag"
+  }
+}

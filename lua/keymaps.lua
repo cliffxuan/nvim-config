@@ -170,7 +170,9 @@ keymap('n', '<leader>ep', ':call OpenPlugins()<cr>', { noremap = true })
 keymap('n', '<leader>er', ':call OpenVimRC()<cr>', { noremap = true })
 keymap('n', '<leader>es', ':source $MYVIMRC<cr>', { noremap = true })
 keymap('n', '<leader>et', ':tabnew<cr>', { noremap = true })
-keymap('n', '<leader>eu', ':UltiSnipsEdit<cr>', { noremap = true })
+keymap('n', '<leader>eu', function()
+  vim.cmd('edit ' .. vim.fn.stdpath 'config' .. '/snippets')
+end, { noremap = true, desc = 'Edit snippets' })
 keymap('n', '<leader>ev', ':Vexplore<cr>', { noremap = true })
 keymap('n', '<leader>en', ':vnew<cr>', { noremap = true })
 keymap('n', '<leader>ex', [[:%s/\s\+$//<CR>:let @/=''<CR>]], { noremap = true })
@@ -314,7 +316,24 @@ keymap('n', '<leader>o', ':WhichKey<CR>', { noremap = true })
 keymap('n', '<leader>p', '"*p', { noremap = true })
 keymap('n', '<leader>q', ':bdelete<CR>', { noremap = true })
 keymap('n', '<leader>r', '<Plug>RunCurrentBuffer', { noremap = true })
-keymap('n', '<leader>s', ':Snippets<CR>', { noremap = true })
+keymap('n', '<leader>s', function()
+  local ls = require 'luasnip'
+  local snips = ls.get_snippets(vim.bo.filetype)
+  if not snips or vim.tbl_isempty(snips) then
+    vim.notify('No snippets for ' .. vim.bo.filetype, vim.log.levels.INFO)
+    return
+  end
+  vim.ui.select(snips, {
+    prompt = 'Snippets',
+    format_item = function(s)
+      return string.format('%s\t%s', s.trigger, s.name or s.dscr or '')
+    end,
+  }, function(choice)
+    if choice then
+      ls.snip_expand(choice)
+    end
+  end)
+end, { noremap = true, desc = 'Insert snippet' })
 keymap('n', '<leader>t', '<cmd>ToggleTerm direction=float<cr>', { noremap = true })
 
 keymap('n', '<leader>u ', ':call NumberAndListToggle()<cr>', { desc = 'Toggle number and list', noremap = true })

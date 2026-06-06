@@ -1,0 +1,28 @@
+{
+  "panel kickoff": {
+    "prefix": "panel-kickoff",
+    "body": [
+      "import panel as pn",
+      "",
+      "main = pn.Column(",
+      "    \"# Hello World!\",",
+      ")",
+      "COLORS = [",
+      "    \"#A01346\",  # (Fast)",
+      "    \"#00A170\",  # (Mint)",
+      "    \"#DAA520\",  # (Golden Rod)",
+      "    \"#2F4F4F\",  # (Dark Slate Grey)",
+      "    \"#F08080\",  # (Light Coral)",
+      "    \"#4099DA\",  # (Summer Sky)",
+      "]",
+      "pn.template.FastListTemplate(",
+      "    title=\"Panel App\",",
+      "    main=main,",
+      "    main_max_width=\"min(80%, 1200px)\",",
+      "    accent=COLORS[0],",
+      "    theme=\"dark\",",
+      ").servable()"
+    ],
+    "description": "panel kickoff"
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "name": "nvim-config-snippets",
+  "engines": {
+    "vscode": "*"
+  },
+  "contributes": {
+    "snippets": [
+      {
+        "language": "html",
+        "path": "./html.json"
+      },
+      {
+        "language": "javascript",
+        "path": "./javascript.json"
+      },
+      {
+        "language": "php",
+        "path": "./php.json"
+      },
+      {
+        "language": "python",
+        "path": "./python_cdk.json"
+      },
+      {
+        "language": "python",
+        "path": "./python_misc.json"
+      },
+      {
+        "language": "python",
+        "path": "./python_nicegui.json"
+      },
+      {
+        "language": "python",
+        "path": "./python_pandas.json"
+      },
+      {
+        "language": "python",
+        "path": "./python_panel.json"
+      },
+      {
+        "language": "python",
+        "path": "./python_stdlib.json"
+      },
+      {
+        "language": "python",
+        "path": "./python_streamlit.json"
+      },
+      {
+        "language": "python",
+        "path": "./python_utility.json"
+      },
+      {
+        "language": "rust",
+        "path": "./rust.json"
+      },
+      {
+        "language": "sh",
+        "path": "./sh.json"
+      }
+    ]
+  }
+}
