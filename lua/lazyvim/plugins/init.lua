@@ -1,7 +1,5 @@
 return {
   'easymotion/vim-easymotion',
-  { 'junegunn/fzf', build = './install --bin' },
-  'junegunn/fzf.vim',
   'majutsushi/tagbar',
   'tpope/vim-abolish',
   'tpope/vim-endwise',

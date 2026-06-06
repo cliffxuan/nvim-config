@@ -151,7 +151,7 @@ keymap('n', '<leader>jf', search_word_in_current_file, { desc = 'Search in curre
 keymap('n', '<leader>jl', function()
   search_word_in_current_file(vim.fn.expand '<cword>', 'normal')
 end, { desc = 'Search word under the cursor in current file', noremap = true })
-keymap('n', '<leader>jg', ':Rg ', { desc = 'Search with Rg', noremap = true })
+keymap('n', '<leader>jg', telescope.live_grep, { desc = 'Live grep', noremap = true })
 keymap('n', '<leader>jr', function()
   require('trouble').toggle 'lsp_references'
 end, { desc = 'Search references', noremap = true })
@@ -211,13 +211,19 @@ keymap(
 keymap('n', '<leader>gd', function()
   require('gitsigns').preview_hunk()
 end, { noremap = true, desc = 'Show Git hunk diff' })
-keymap('n', '<leader>gf', ':GFiles?<cr>', { noremap = true, desc = 'Find Git files' })
+keymap('n', '<leader>gf', function()
+  telescope.git_files { initial_mode = 'normal' }
+end, { noremap = true, desc = 'Find Git files' })
 keymap('n', '<leader>gg', ':Git<cr>', { noremap = true, desc = 'Open Git status' })
-keymap('n', '<leader>gl', ':Commits<cr>', { noremap = true, desc = 'Show Git commits' })
+keymap('n', '<leader>gl', function()
+  telescope.git_commits { initial_mode = 'normal' }
+end, { noremap = true, desc = 'Show Git commits' })
 keymap('n', '<leader>gm', function()
   require('gitsigns').blame_line { full = true }
 end, { noremap = true, desc = 'Show Git blame popup' })
-keymap('n', '<leader>go', ':BCommits<cr>', { noremap = true, desc = 'Show buffer commits' })
+keymap('n', '<leader>go', function()
+  telescope.git_bcommits { initial_mode = 'normal' }
+end, { noremap = true, desc = 'Show buffer commits' })
 keymap('n', '<leader>gp', ':Git push<cr>', { noremap = true, desc = 'Push to Git' })
 keymap('n', '<leader>gr', ':Gread<cr>', { noremap = true, desc = 'Read from Git' })
 keymap('n', '<leader>gs', function()
@@ -311,7 +317,9 @@ keymap('n', '<leader><leader>j', '<Plug>(easymotion-j)', { noremap = true })
 keymap('n', '<leader><leader>k', '<Plug>(easymotion-k)', { noremap = true })
 
 keymap('n', '<leader>l', ':Trouble diagnostics toggle filter.buf=0 focus=true<CR>', { noremap = true, silent = true })
-keymap('n', '<leader>m', ':Marks<CR>', { noremap = true })
+keymap('n', '<leader>m', function()
+  telescope.marks { initial_mode = 'normal' }
+end, { noremap = true, desc = 'Marks' })
 keymap('n', '<leader>o', ':WhichKey<CR>', { noremap = true })
 keymap('n', '<leader>p', '"*p', { noremap = true })
 keymap('n', '<leader>q', ':bdelete<CR>', { noremap = true })
@@ -368,11 +376,6 @@ keymap('n', '<S-Tab>', ':bprevious<CR>', {})
 keymap('n', '<C-k>', '<Plug>(ale_previous_wrap)', { silent = true })
 keymap('n', '<C-j>', '<Plug>(ale_next_wrap)', { silent = true })
 
-keymap('i', '<c-x><c-k>', function()
-  return vim.fn['fzf#vim#complete#word'] { window = { width = 0.2, height = 0.9, xoffset = 1 } }
-end, { expr = true })
-keymap('i', '<c-x><c-f>', '<plug>(fzf-complete-path)', {})
-keymap('i', '<c-x><c-l>', '<plug>(fzf-complete-line)', {})
 keymap('t', '<c-j>', '<c-\\><c-n>', { noremap = true })
 keymap('n', '<c-/>', '<cmd>ToggleTerm direction=float<cr>', { noremap = true })
 keymap('t', '<c-/>', '<cmd>ToggleTerm<cr>', { noremap = true })

@@ -284,11 +284,6 @@ endfunction
 
 vim.cmd [[
 " global variables {{{
-  let $FZF_DEFAULT_COMMAND = 'rg --files'
-  let $FZF_DEFAULT_OPTS = "--bind ctrl-y:preview-up,ctrl-e:preview-down,
-\ctrl-u:preview-half-page-up,ctrl-d:preview-half-page-down,
-\shift-up:preview-top,shift-down:preview-bottom"
-  let g:fzf_layout = { 'window': { 'width': 0.98, 'height': 0.8, 'highlight': 'Todo', 'border': 'sharp' } }
   let g:terraform_align=1
 
   " python provider uses pynvim specific virtualenv
