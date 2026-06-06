@@ -1,7 +1,5 @@
 return {
-  'ConradIrwin/vim-bracketed-paste',
   'easymotion/vim-easymotion',
-  'editorconfig/editorconfig-vim',
   { 'junegunn/fzf', build = './install --bin' },
   'junegunn/fzf.vim',
   'majutsushi/tagbar',
@@ -12,7 +10,6 @@ return {
   'tpope/vim-fugitive',
   'tpope/vim-surround',
   'tpope/vim-repeat',
-  'tpope/vim-commentary',
   'tpope/vim-unimpaired',
   'kana/vim-textobj-user',
   'mhinz/vim-signify',
