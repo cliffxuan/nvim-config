@@ -110,7 +110,6 @@ keymap('n', 'K', ':hide<CR>', { noremap = true })
 -- leader
 require('which-key').add {
   { '<leader>a', group = 'AI' },
-  { '<leader>d', group = 'Vibe' },
   { '<leader>j', group = 'Text Search' },
   { '<leader>n', group = 'Open file' },
   { '<leader>u', group = 'Display settings' },
@@ -204,8 +203,8 @@ keymap('n', '<leader>gc', ':Git commit<cr>', { noremap = true, desc = 'Git commi
 keymap(
   'n',
   '<leader>gC',
-  ':Git commit <bar> :GptGitCommitMsg<cr>',
-  { noremap = true, desc = 'Git commit with Gpt message' }
+  ':Git commit <bar> :CodeCompanion /commit<cr>',
+  { noremap = true, desc = 'Git commit with AI message' }
 )
 keymap('n', '<leader>gd', ':SignifyHunkDiff<cr>', { noremap = true, desc = 'Show Git hunk diff' })
 keymap('n', '<leader>gf', ':GFiles?<cr>', { noremap = true, desc = 'Find Git files' })

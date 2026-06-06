@@ -301,5 +301,3 @@ vim.cmd [[
 require 'config'
 require 'keymaps'
 require 'clipboard'
-require 'gpt'
-require('vibe-coding')

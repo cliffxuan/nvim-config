@@ -1,9 +1,0 @@
---- a/original.sh
-+++ b/original.sh
-@@ -0,0 +1,6 @@
-+#!/bin/bash
-+echo "This is a new script"
-+
-+# Add some functionality
-+DATE=$(date)
-+echo "Current date: $DATE"
