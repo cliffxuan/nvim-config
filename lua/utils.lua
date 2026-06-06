@@ -57,7 +57,7 @@ M.is_wsl = function()
 end
 
 M.is_linux = function()
-  return vim.loop.os_uname().sysname == 'Linux'
+  return vim.uv.os_uname().sysname == 'Linux'
 end
 
 M.set_open_api_key = function()

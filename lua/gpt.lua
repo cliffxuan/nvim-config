@@ -35,10 +35,10 @@ local load_buffer_for_path = function(file_path) -- TODO: better way to do it?
   end
   vim.api.nvim_buf_set_name(buf, file_path)
   -- Set buffer options
-  vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
-  vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe')
-  vim.api.nvim_buf_set_option(buf, 'swapfile', false)
-  vim.api.nvim_buf_set_option(buf, 'filetype', 'markdown')
+  vim.bo[buf].buftype = 'nofile'
+  vim.bo[buf].bufhidden = 'wipe'
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].filetype = 'markdown'
 
   -- Auto-save function
   vim.api.nvim_create_autocmd('BufLeave', {
@@ -123,7 +123,7 @@ local run_shell_command = function(shell_command, input, buffer, on_exit)
     return string.format('%s %s', spinner_frames[frame], table.concat(shell_command, ' '))
   end
   local nid = Notify.add(get_msg())
-  local timer = vim.loop.new_timer()
+  local timer = vim.uv.new_timer()
   local running = true
   timer:start(
     0,

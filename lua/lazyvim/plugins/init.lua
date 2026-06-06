@@ -42,7 +42,6 @@ return {
       require('which-key.plugins.presets').operators['y'] = nil
     end,
   },
-  { 'folke/neodev.nvim', opts = {} },
   {
     'williamboman/mason.nvim',
     config = function()

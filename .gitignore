@@ -7,3 +7,7 @@ doc/tags
 plugged/*
 lazy-lock.json
 .aider*
+.DS_Store
+__pycache__/
+.ruff_cache/
+.pytest_cache/
