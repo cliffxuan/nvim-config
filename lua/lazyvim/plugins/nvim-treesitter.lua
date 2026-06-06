@@ -5,7 +5,28 @@ return {
     config = function()
       require('nvim-treesitter.install').prefer_git = true
       require('nvim-treesitter.configs').setup {
-        ensure_installed = { 'c', 'lua', 'vim', 'vimdoc', 'query', 'javascript', 'html', 'rust' },
+        ensure_installed = {
+          'c',
+          'lua',
+          'vim',
+          'vimdoc',
+          'query',
+          'javascript',
+          'typescript',
+          'tsx',
+          'html',
+          'css',
+          'rust',
+          'python',
+          'go',
+          'json',
+          'yaml',
+          'toml',
+          'bash',
+          'markdown',
+          'markdown_inline',
+          'dockerfile',
+        },
         auto_install = true,
         sync_install = false,
         highlight = {

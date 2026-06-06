@@ -15,13 +15,6 @@ return {
     cmd = 'Trouble',
   },
   {
-    'sheerun/vim-polyglot',
-    init = function()
-      -- ftdetect fails for *.lean
-      vim.g.polyglot_disabled = { 'python', 'markdown', 'autoindent', 'ftdetect' }
-    end,
-  },
-  {
     'folke/which-key.nvim',
     event = 'VeryLazy',
     init = function()
