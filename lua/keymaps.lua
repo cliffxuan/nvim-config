@@ -325,21 +325,9 @@ keymap('n', '<leader>p', '"*p', { noremap = true })
 keymap('n', '<leader>q', ':bdelete<CR>', { noremap = true })
 keymap('n', '<leader>r', '<Plug>RunCurrentBuffer', { noremap = true })
 keymap('n', '<leader>s', function()
-  local ls = require 'luasnip'
-  local snips = ls.get_snippets(vim.bo.filetype)
-  if not snips or vim.tbl_isempty(snips) then
-    vim.notify('No snippets for ' .. vim.bo.filetype, vim.log.levels.INFO)
-    return
-  end
-  vim.ui.select(snips, {
-    prompt = 'Snippets',
-    format_item = function(s)
-      return string.format('%s\t%s', s.trigger, s.name or s.dscr or '')
-    end,
-  }, function(choice)
-    if choice then
-      ls.snip_expand(choice)
-    end
+  vim.cmd 'startinsert'
+  vim.schedule(function()
+    require('mini.snippets').expand { match = false }
   end)
 end, { noremap = true, desc = 'Insert snippet' })
 keymap('n', '<leader>t', '<cmd>ToggleTerm direction=float<cr>', { noremap = true })

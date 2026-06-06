@@ -11,6 +11,17 @@ return {
     require('mini.move').setup()
     require('mini.notify').setup()
     require('mini.pairs').setup()
+    -- snippet engine; loads VSCode-format JSON from <config>/snippets/
+    -- (<lang>.json or <lang>/*.json) keyed by the treesitter language of the
+    -- buffer. `sh` files use the `bash` parser, so map sh -> bash.json too
+    -- (covers the rare case where no bash parser is installed).
+    require('mini.snippets').setup {
+      snippets = {
+        require('mini.snippets').gen_loader.from_lang {
+          lang_patterns = { sh = { '**/bash.json' } },
+        },
+      },
+    }
     require('mini.splitjoin').setup()
     require('mini.starter').setup()
     require('mini.tabline').setup()

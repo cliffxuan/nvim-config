@@ -1,22 +1,12 @@
--- Completion (blink.cmp) + snippet engine (LuaSnip), replacing nvim-cmp +
--- UltiSnips. Snippets live as VSCode-format JSON under <config>/snippets and
--- are loaded by LuaSnip; LSP capabilities are advertised in lua/config.lua.
+-- Completion engine (blink.cmp), replacing nvim-cmp. Snippets are handled by
+-- mini.snippets (configured in mini.lua); LSP capabilities are advertised in
+-- lua/config.lua.
 return {
-  {
-    'L3MON4D3/LuaSnip',
-    version = 'v2.*',
-    config = function()
-      require('luasnip.loaders.from_vscode').lazy_load {
-        paths = { vim.fn.stdpath 'config' .. '/snippets' },
-      }
-    end,
-  },
   {
     'saghen/blink.cmp',
     version = '1.*',
-    dependencies = { 'L3MON4D3/LuaSnip' },
     opts = {
-      snippets = { preset = 'luasnip' },
+      snippets = { preset = 'mini_snippets' },
       sources = {
         default = { 'lsp', 'path', 'snippets', 'buffer' },
       },
