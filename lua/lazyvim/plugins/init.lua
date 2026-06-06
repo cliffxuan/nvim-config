@@ -3,7 +3,6 @@ return {
   { 'junegunn/fzf', build = './install --bin' },
   'junegunn/fzf.vim',
   'majutsushi/tagbar',
-  'voldikss/vim-floaterm',
   'tpope/vim-abolish',
   'tpope/vim-endwise',
   'tpope/vim-fugitive',

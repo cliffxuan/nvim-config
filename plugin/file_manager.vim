@@ -1,6 +1,6 @@
 function! FileManager()
-  if exists(':FloatermNew') && executable('lf')
-    execute "FloatermNew lf"
+  if has('nvim') && executable('lf')
+    call luaeval('require("run_term").run("lf", { close_on_exit = true })')
     return
   endif
   return ToggleExplorer()

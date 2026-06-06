@@ -315,7 +315,7 @@ keymap('n', '<leader>p', '"*p', { noremap = true })
 keymap('n', '<leader>q', ':bdelete<CR>', { noremap = true })
 keymap('n', '<leader>r', '<Plug>RunCurrentBuffer', { noremap = true })
 keymap('n', '<leader>s', ':Snippets<CR>', { noremap = true })
-keymap('n', '<leader>t', ':FloatermToggle<CR>', { noremap = true })
+keymap('n', '<leader>t', '<cmd>ToggleTerm direction=float<cr>', { noremap = true })
 
 keymap('n', '<leader>u ', ':call NumberAndListToggle()<cr>', { desc = 'Toggle number and list', noremap = true })
 keymap('n', '<leader>ui', function ()
@@ -355,7 +355,7 @@ end, { expr = true })
 keymap('i', '<c-x><c-f>', '<plug>(fzf-complete-path)', {})
 keymap('i', '<c-x><c-l>', '<plug>(fzf-complete-line)', {})
 keymap('t', '<c-j>', '<c-\\><c-n>', { noremap = true })
-keymap('n', '<c-/>', ':FloatermToggle<cr>', { noremap = true })
-keymap('t', '<c-/>', '<c-\\><c-n>:hide<cr>', { noremap = true })
-keymap('n', '<c-_>', ':FloatermToggle<cr>', { noremap = true }) -- same as <c-/> in tmux
-keymap('t', '<c-_>', '<c-\\><c-n>:hide<cr>', { noremap = true }) -- same as <c-/> in tmux
+keymap('n', '<c-/>', '<cmd>ToggleTerm direction=float<cr>', { noremap = true })
+keymap('t', '<c-/>', '<cmd>ToggleTerm<cr>', { noremap = true })
+keymap('n', '<c-_>', '<cmd>ToggleTerm direction=float<cr>', { noremap = true }) -- same as <c-/> in tmux
+keymap('t', '<c-_>', '<cmd>ToggleTerm<cr>', { noremap = true }) -- same as <c-/> in tmux
