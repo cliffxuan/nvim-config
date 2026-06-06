@@ -9,8 +9,6 @@ return {
   'tpope/vim-fugitive',
   'tpope/vim-repeat',
   'kana/vim-textobj-user',
-  'mhinz/vim-signify',
-  'rhysd/git-messenger.vim',
   {
     'folke/trouble.nvim',
     opts = {},

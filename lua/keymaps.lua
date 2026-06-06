@@ -206,11 +206,15 @@ keymap(
   ':Git commit <bar> :CodeCompanion /commit<cr>',
   { noremap = true, desc = 'Git commit with AI message' }
 )
-keymap('n', '<leader>gd', ':SignifyHunkDiff<cr>', { noremap = true, desc = 'Show Git hunk diff' })
+keymap('n', '<leader>gd', function()
+  require('gitsigns').preview_hunk()
+end, { noremap = true, desc = 'Show Git hunk diff' })
 keymap('n', '<leader>gf', ':GFiles?<cr>', { noremap = true, desc = 'Find Git files' })
 keymap('n', '<leader>gg', ':Git<cr>', { noremap = true, desc = 'Open Git status' })
 keymap('n', '<leader>gl', ':Commits<cr>', { noremap = true, desc = 'Show Git commits' })
-keymap('n', '<leader>gm', ':GitMessenger<cr>', { noremap = true, desc = 'Show Git messages' })
+keymap('n', '<leader>gm', function()
+  require('gitsigns').blame_line { full = true }
+end, { noremap = true, desc = 'Show Git blame popup' })
 keymap('n', '<leader>go', ':BCommits<cr>', { noremap = true, desc = 'Show buffer commits' })
 keymap('n', '<leader>gp', ':Git push<cr>', { noremap = true, desc = 'Push to Git' })
 keymap('n', '<leader>gr', ':Gread<cr>', { noremap = true, desc = 'Read from Git' })
@@ -220,11 +224,17 @@ keymap('n', '<leader>gs', function()
     cwd = vim.fn.expand '%:p:h',
   }
 end, { noremap = true, desc = 'Git status' })
-keymap('n', '<leader>gu', ':SignifyHunkUndo<cr>', { noremap = true, desc = 'Undo Git hunk' })
+keymap('n', '<leader>gu', function()
+  require('gitsigns').reset_hunk()
+end, { noremap = true, desc = 'Undo Git hunk' })
 keymap('n', '<leader>gv', ':Gvdiff<cr>', { noremap = true, desc = 'Show Git diff' })
 keymap('n', '<leader>gw', ':Gwrite<cr>', { noremap = true, desc = 'Write to Git' })
-keymap('n', '<leader>gj', '<plug>(signify-next-hunk)', { noremap = true, desc = 'Next Git hunk' })
-keymap('n', '<leader>gk', '<plug>(signify-prev-hunk)', { noremap = true, desc = 'Previous Git hunk' })
+keymap('n', '<leader>gj', function()
+  require('gitsigns').nav_hunk 'next'
+end, { noremap = true, desc = 'Next Git hunk' })
+keymap('n', '<leader>gk', function()
+  require('gitsigns').nav_hunk 'prev'
+end, { noremap = true, desc = 'Previous Git hunk' })
 
 keymap('n', '<leader>hh', telescope.oldfiles, { noremap = true, desc = 'Show old files' })
 keymap('n', '<leader>hs', telescope.search_history, { noremap = true, desc = 'Show search history' })
