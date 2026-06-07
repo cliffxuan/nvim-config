@@ -76,7 +76,8 @@ return {
   'neovim/nvim-lspconfig',
   'nvim-lua/plenary.nvim',
   -- language specific
-  { 'begriffs/haskell-vim-now', ft = 'haskell' },
+  -- haskell-tools manages its own lazy-loading; don't ft-gate or call setup()
+  { 'mrcjkb/haskell-tools.nvim', lazy = false },
   { 'hashivim/vim-terraform', ft = 'terraform' },
   { 'OmniSharp/omnisharp-vim', ft = 'cs' },
   { 'Glench/Vim-Jinja2-Syntax', ft = 'jinja' },
