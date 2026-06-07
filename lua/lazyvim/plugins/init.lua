@@ -84,7 +84,6 @@ return {
   -- haskell-tools manages its own lazy-loading; don't ft-gate or call setup()
   { 'mrcjkb/haskell-tools.nvim', lazy = false },
   { 'hashivim/vim-terraform', ft = 'terraform' },
-  { 'OmniSharp/omnisharp-vim', ft = 'cs' },
   { 'jeetsukumaran/vim-pythonsense', ft = 'python' },
   { 'mrcjkb/rustaceanvim', ft = 'rust' },
   {
