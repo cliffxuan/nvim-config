@@ -184,44 +184,6 @@ function! NumberAndListToggle()
     endif
   endif
 endfunction
-"grep
-function! s:GrepOperator(type)
-  if a:type ==# 'v'
-    normal! `<v`>y
-  elseif a:type ==# 'char'
-    normal! `[v`]y
-  else
-    return
-  endif
-  execute "Rg " . @@
-endfunction
-
-
-function! GuessProjectRoot()
-  if @% != ''
-    let l:dir = fnamemodify(expand('%:p'), ':h')
-  else
-    let l:dir = getcwd()
-  endif
-  while index(['/', '.'], l:dir) == -1
-    for l:marker in ['.rootdir', '.git', '.hg', '.svn', '.bzr', 'site-packages']
-      if isdirectory(l:dir . '/' . l:marker)
-        return l:dir
-      endif
-    endfor
-    let l:dir = fnamemodify(l:dir, ':h')  " get parent directory
-  endwhile
-  " Nothing found, fallback to current working dir
-  return l:dir
-endfunction
-
-function! CopyMatches(reg)
-  let hits = []
-  %s//\=len(add(hits, submatch(0))) ? submatch(0) : ''/ge
-  let reg = empty(a:reg) ? '+' : a:reg
-  execute 'let @'.reg.' = join(hits, "\n") . "\n"'
-endfunction
-
 function! s:list_buffers()
   redir => list
   silent ls
@@ -241,17 +203,6 @@ function! DeleteOtherBuffers()
   else
     echo 'no other buffers found'
   endif
-endfunction
-
-" Function to toggle the location list window
-function! ToggleLocationList()
-    if exists('g:location_list_window_open')
-        lclose
-        unlet g:location_list_window_open
-    else
-        lopen
-        let g:location_list_window_open = 1
-    endif
 endfunction
 
 function! GetColors(includeBuiltin=0)
