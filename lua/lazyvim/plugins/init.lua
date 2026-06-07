@@ -10,7 +10,12 @@ return {
       },
     },
   },
-  'majutsushi/tagbar',
+  {
+    'stevearc/aerial.nvim',
+    cmd = { 'AerialToggle' },
+    dependencies = { 'nvim-treesitter/nvim-treesitter', 'nvim-tree/nvim-web-devicons' },
+    opts = {},
+  },
   'tpope/vim-abolish',
   'tpope/vim-endwise',
   'tpope/vim-fugitive',
