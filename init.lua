@@ -1,5 +1,17 @@
 vim.g.mapleader = ' '
 vim.g.maplocalleader = ','
+
+-- jinja templates -> htmldjango (nvim's built-in syntax); replaces
+-- Glench/Vim-Jinja2-Syntax. (treesitter ships no jinja highlight queries.)
+vim.filetype.add {
+  extension = {
+    jinja = 'htmldjango',
+    jinja2 = 'htmldjango',
+    j2 = 'htmldjango',
+    tera = 'htmldjango',
+  },
+}
+
 vim.cmd [[
 " basic settings
 filetype plugin indent on

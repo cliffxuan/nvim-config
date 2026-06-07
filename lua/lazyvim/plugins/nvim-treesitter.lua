@@ -35,7 +35,9 @@ return {
         },
         indent = { enable = true },
         modules = {},
-        ignore_install = {},
+        -- experimental and ships no highlight queries; let native htmldjango
+        -- syntax handle jinja files instead (see vim.filetype.add in init.lua)
+        ignore_install = { 'htmldjango' },
         fold = {
           enable = true,
         },

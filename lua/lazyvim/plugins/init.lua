@@ -85,7 +85,6 @@ return {
   { 'mrcjkb/haskell-tools.nvim', lazy = false },
   { 'hashivim/vim-terraform', ft = 'terraform' },
   { 'OmniSharp/omnisharp-vim', ft = 'cs' },
-  { 'Glench/Vim-Jinja2-Syntax', ft = 'jinja' },
   { 'jeetsukumaran/vim-pythonsense', ft = 'python' },
   { 'mrcjkb/rustaceanvim', ft = 'rust' },
   {
