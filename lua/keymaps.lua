@@ -354,7 +354,9 @@ keymap('n', '<leader>uu', ':Telescope commands<cr>', { desc = 'Telescope command
 
 keymap('n', '<leader>v', ':vsp<CR>', { noremap = true })
 keymap('n', '<leader>w', ':w<CR>', { noremap = true })
-keymap('n', '<leader>x', ':ALEFix<CR>', { noremap = true })
+keymap('n', '<leader>x', function()
+  require('conform').format { async = true, lsp_format = 'fallback' }
+end, { noremap = true, desc = 'Format buffer' })
 keymap('n', '<leader>y', [[:call CopyFileName()<CR>]], { noremap = true })
 keymap('v', '<leader>y', '"*y', { noremap = true })
 keymap('n', '<leader>zr', function()
@@ -369,8 +371,12 @@ keymap('n', 'k', ':<C-U>call Up(v:count)<CR>', { silent = true })
 keymap('v', 'k', 'gk', { silent = true })
 keymap('n', '<Tab>', ':bnext<CR>', {})
 keymap('n', '<S-Tab>', ':bprevious<CR>', {})
-keymap('n', '<C-k>', '<Plug>(ale_previous_wrap)', { silent = true })
-keymap('n', '<C-j>', '<Plug>(ale_next_wrap)', { silent = true })
+keymap('n', '<C-k>', function()
+  vim.diagnostic.jump { count = -1, float = true }
+end, { silent = true, desc = 'Prev diagnostic' })
+keymap('n', '<C-j>', function()
+  vim.diagnostic.jump { count = 1, float = true }
+end, { silent = true, desc = 'Next diagnostic' })
 
 keymap('t', '<c-j>', '<c-\\><c-n>', { noremap = true })
 keymap('n', '<c-/>', '<cmd>ToggleTerm direction=float<cr>', { noremap = true })
