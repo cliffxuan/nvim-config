@@ -81,9 +81,6 @@ return {
   'neovim/nvim-lspconfig',
   'nvim-lua/plenary.nvim',
   -- language specific
-  -- haskell-tools manages its own lazy-loading; don't ft-gate or call setup()
-  { 'mrcjkb/haskell-tools.nvim', lazy = false },
-  { 'hashivim/vim-terraform', ft = 'terraform' },
   { 'jeetsukumaran/vim-pythonsense', ft = 'python' },
   { 'mrcjkb/rustaceanvim', ft = 'rust' },
   {

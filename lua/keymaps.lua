@@ -1,6 +1,7 @@
 local utils = require 'utils'
 local telescope = require 'telescope.builtin'
 local Notify = require 'mini.notify'
+local commit_msg = require 'commit_msg'
 require('format_long_strings').setup()
 
 local search_word_under_cursor = function()
@@ -203,12 +204,10 @@ keymap('n', '<leader>gA', function()
 end, { noremap = true, desc = 'Git add all files' })
 keymap('n', '<leader>gb', ':Git blame<cr>', { noremap = true, desc = 'Show Git blame' })
 keymap('n', '<leader>gc', ':Git commit<cr>', { noremap = true, desc = 'Git commit' })
-keymap(
-  'n',
-  '<leader>gC',
-  ':Git commit <bar> :CodeCompanion /commit<cr>',
-  { noremap = true, desc = 'Git commit with AI message' }
-)
+keymap('n', '<leader>gC', function()
+  vim.cmd 'Git commit'
+  commit_msg.generate()
+end, { noremap = true, desc = 'Git commit with AI message' })
 keymap('n', '<leader>gd', function()
   require('gitsigns').preview_hunk()
 end, { noremap = true, desc = 'Show Git hunk diff' })
