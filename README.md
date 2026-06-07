@@ -5,8 +5,9 @@ plugin stack so you can find your way around quickly.
 
 ## Setup
 
-- **Neovim 0.12+** (aerial's default branch requires it), plugin manager is
-  **lazy.nvim** (bootstrapped in `init.lua`).
+- **Neovim** with **lazy.nvim** (bootstrapped in `init.lua`). Developed on 0.12;
+  the only version-sensitive piece is aerial.nvim, whose default branch needs
+  0.12+ — on older Neovim, pin its `nvim-0.11` branch.
 - The repo is **symlinked to `~/.config/nvim`**, so `vim.fn.stdpath('config')`
   resolves to this directory.
 - Leader = `<Space>`, localleader = `,`.

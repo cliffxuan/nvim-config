@@ -5,7 +5,12 @@ human-facing plugin map; this file is about *how to make changes safely here*.
 
 ## Environment
 
-- Neovim **0.12+** (aerial's default branch needs it), lazy.nvim. The repo is **symlinked to `~/.config/nvim`**, so
+- **Don't assume a Neovim version** — this config runs on multiple machines. Check
+  the actual one with `nvim --version` before relying on version-gated behavior.
+- The only version-sensitive plugin is **aerial.nvim**: its default branch needs
+  Neovim 0.12+. On older Neovim (< 0.12), pin `branch = 'nvim-0.11'` in the aerial
+  spec (`lua/lazyvim/plugins/init.lua`).
+- lazy.nvim manager. The repo is **symlinked to `~/.config/nvim`**, so
   `vim.fn.stdpath('config')` == this repo. Running `nvim -u init.lua` from the repo
   still uses the symlinked config dir for `stdpath`.
 - `lazy-lock.json` is gitignored.
