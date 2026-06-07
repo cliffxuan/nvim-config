@@ -72,7 +72,6 @@ return {
   { 'Glench/Vim-Jinja2-Syntax', ft = 'jinja' },
   { 'jeetsukumaran/vim-pythonsense', ft = 'python' },
   { 'mrcjkb/rustaceanvim', ft = 'rust' },
-  { 'rust-lang/rust.vim', ft = 'rust' },
   {
     'MeanderingProgrammer/render-markdown.nvim',
     dependencies = { 'nvim-treesitter/nvim-treesitter', 'echasnovski/mini.nvim' },
