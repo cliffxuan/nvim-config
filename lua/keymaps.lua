@@ -101,8 +101,9 @@ keymap('n', '-', function()
     MiniFiles.open(vim.fn.expand '%:p:h', false)
   end
 end, { noremap = true, silent = true })
-keymap('n', 's', '<Plug>(easymotion-overwin-f2)')
-keymap({ 'o', 'x' }, 's', '<Plug>(easymotion-f2)')
+keymap({ 'n', 'x', 'o' }, 's', function()
+  require('flash').jump()
+end, { desc = 'Flash jump' })
 
 -- Hide window
 keymap('n', 'K', ':hide<CR>', { noremap = true })
@@ -313,8 +314,15 @@ keymap('n', '<leader>k/', ':exec  "cd /"  <bar> :pwd<cr>', { desc = 'cd into /',
 
 keymap('n', '<leader><leader>d', ':bwipeout<CR>', { noremap = true })
 keymap('n', '<leader><leader>D', ':call DeleteOtherBuffers()<CR>', { noremap = true })
-keymap('n', '<leader><leader>j', '<Plug>(easymotion-j)', { noremap = true })
-keymap('n', '<leader><leader>k', '<Plug>(easymotion-k)', { noremap = true })
+local flash_line = function()
+  require('flash').jump {
+    search = { mode = 'search', max_length = 0 },
+    label = { after = { 0, 0 } },
+    pattern = '^',
+  }
+end
+keymap('n', '<leader><leader>j', flash_line, { noremap = true, desc = 'Flash to line' })
+keymap('n', '<leader><leader>k', flash_line, { noremap = true, desc = 'Flash to line' })
 
 keymap('n', '<leader>l', ':Trouble diagnostics toggle filter.buf=0 focus=true<CR>', { noremap = true, silent = true })
 keymap('n', '<leader>m', function()

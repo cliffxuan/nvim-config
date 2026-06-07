@@ -27,7 +27,7 @@ return {
     require('mini.tabline').setup()
 
     -- replaces tpope/vim-surround, mapped to keep vim-surround muscle memory
-    -- (ys/ds/cs + visual S) and avoid clobbering the easymotion `s` motion.
+    -- (ys/ds/cs + visual S) and avoid clobbering the flash `s` motion.
     require('mini.surround').setup {
       mappings = {
         add = 'ys',

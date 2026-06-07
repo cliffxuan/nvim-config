@@ -1,5 +1,15 @@
 return {
-  'easymotion/vim-easymotion',
+  {
+    'folke/flash.nvim',
+    lazy = true,
+    -- only the explicit `s` jump; leave f/t to mini.jump and `/` search alone.
+    opts = {
+      modes = {
+        search = { enabled = false },
+        char = { enabled = false },
+      },
+    },
+  },
   'majutsushi/tagbar',
   'tpope/vim-abolish',
   'tpope/vim-endwise',
