@@ -42,9 +42,12 @@ return {
           enable = true,
         },
       }
-      -- Set the foldmethod to use Treesitter
+      -- Set the foldmethod to use Treesitter. Use Neovim's native (C-backed)
+      -- foldexpr, not nvim-treesitter's legacy VimScript `nvim_treesitter#foldexpr()`
+      -- which is O(n^2) per redraw and freezes the UI on large/nested files
+      -- (e.g. opening a big JSON via Telescope, which forces several redraws).
       vim.opt.foldmethod = 'expr'
-      vim.opt.foldexpr = 'nvim_treesitter#foldexpr()'
+      vim.opt.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
       -- Start with folds closed
       vim.opt.foldlevel = 0
     end,
