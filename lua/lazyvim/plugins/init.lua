@@ -85,7 +85,7 @@ return {
   { 'mrcjkb/rustaceanvim', ft = 'rust' },
   {
     'MeanderingProgrammer/render-markdown.nvim',
-    dependencies = { 'nvim-treesitter/nvim-treesitter', 'echasnovski/mini.nvim' },
+    dependencies = { 'nvim-treesitter/nvim-treesitter', 'nvim-mini/mini.nvim' },
     ft = 'markdown',
     opts = {},
   },
