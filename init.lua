@@ -105,8 +105,8 @@ set wildignore+=*.pyc,*.pyo,*pyd                 " Python byte code
 set wildignore+=*.orig                           " Merge resolution files}
 " }}}
 " display {{{
-"warn me if my line is over 88 columns
-set colorcolumn=88
+"warn me if my line is over 121 columns
+set colorcolumn=121
 set background=dark
 set termguicolors
 let g:eliteColors = uniq(split('

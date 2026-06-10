@@ -3,8 +3,7 @@
 
 local M = {}
 
--- Maximum line length (PEP 8 recommends 79 for code, 88 for Black)
-local MAX_LINE_LENGTH = 88
+local MAX_LINE_LENGTH = 120
 
 -- Format a long string into multiple lines
 function M.format_long_string()
