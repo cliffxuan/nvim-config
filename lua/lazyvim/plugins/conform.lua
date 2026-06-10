@@ -4,8 +4,8 @@ return {
   'stevearc/conform.nvim',
   opts = {
     formatters_by_ft = {
-      -- first available wins (ALE listed these as alternatives)
-      python = { 'ruff_format', 'black', 'autopep8', stop_after_first = true },
+      -- chain (conform's recommended order): fix lint, format, then organize imports
+      python = { 'ruff_fix', 'ruff_format', 'ruff_organize_imports' },
       go = { 'goimports', 'gofmt' },
       terraform = { 'terraform_fmt' },
       javascript = { 'prettier' },
