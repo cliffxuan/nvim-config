@@ -33,28 +33,23 @@ local on_attach = function(client, bufnr)
   -- vim.keymap.set('n', '<space>f', function() vim.lsp.buf.format { async = true } end, bufopts)
 end
 
-local lsp_flags = {
-  debounce_text_changes = 150,
+-- Shared config applied to every server (merged with per-server config below):
+-- the on_attach keymaps + blink.cmp's completion capabilities.
+-- (pcall so a first run before blink's binary is built doesn't break config.)
+local star_config = {
+  on_attach = on_attach,
+  flags = {
+    debounce_text_changes = 150,
+  },
 }
+local ok_blink, blink = pcall(require, 'blink.cmp')
+if ok_blink then
+  star_config.capabilities = blink.get_lsp_capabilities()
+end
+vim.lsp.config('*', star_config)
 
--- Enable language servers
-vim.lsp.enable 'pyright'
-vim.lsp.enable 'vtsls'
-vim.lsp.enable 'lua_ls'
-
--- Setup pyright
-vim.lsp.config('pyright', {
-  on_attach = on_attach,
-  flags = lsp_flags,
-})
--- Setup vtsls
-vim.lsp.config('vtsls', {
-  on_attach = on_attach,
-  flags = lsp_flags,
-})
--- Setup lua_ls with settings
+-- lua_ls needs extra settings on top of the shared '*' config.
 vim.lsp.config('lua_ls', {
-  on_attach = on_attach,
   settings = {
     Lua = {
       completion = {
@@ -67,14 +62,10 @@ vim.lsp.config('lua_ls', {
   },
 })
 
--- Advertise blink.cmp's completion capabilities to all language servers.
--- (pcall so a first run before blink's binary is built doesn't break config.)
-local ok_blink, blink = pcall(require, 'blink.cmp')
-if ok_blink then
-  vim.lsp.config('*', {
-    capabilities = blink.get_lsp_capabilities(),
-  })
-end
+-- Enable language servers
+vim.lsp.enable 'pyright'
+vim.lsp.enable 'vtsls'
+vim.lsp.enable 'lua_ls'
 
 -- Diagnostic gutter signs (the 🚫/⚡ emojis carried over from ALE).
 vim.diagnostic.config {
