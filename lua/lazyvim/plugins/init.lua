@@ -48,12 +48,8 @@ return {
   'morhetz/gruvbox',
   'sickill/vim-monokai',
   'dracula/vim',
-  'jnurmine/Zenburn',
   'haishanh/night-owl.vim',
-  'ayu-theme/ayu-vim',
   'arcticicestudio/nord-vim',
-  'junegunn/seoul256.vim',
-  'altercation/vim-colors-solarized',
   'yuttie/hydrangea-vim',
   'NLKNguyen/papercolor-theme',
   {
