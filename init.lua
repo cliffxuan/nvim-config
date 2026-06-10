@@ -170,18 +170,12 @@ function! NumberAndListToggle()
       set norelativenumber
     endif
     set nolist
-    if exists(":IndentLinesDisable")
-      execute "IndentLinesDisable"
-    endif
   else
     set number
     if exists('&relativenumber')
       set relativenumber
     endif
     set list
-    if exists(":IndentLinesEnable")
-      execute "IndentLinesEnable"
-    endif
   endif
 endfunction
 function! s:list_buffers()
