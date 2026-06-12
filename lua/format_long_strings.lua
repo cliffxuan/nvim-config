@@ -3,7 +3,7 @@
 
 local M = {}
 
-local MAX_LINE_LENGTH = 120
+local MAX_LINE_LENGTH = 88
 
 -- Format a long string into multiple lines
 function M.format_long_string()
