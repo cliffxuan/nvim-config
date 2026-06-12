@@ -227,10 +227,11 @@ end, { noremap = true, desc = 'Show buffer commits' })
 keymap('n', '<leader>gp', ':Git push<cr>', { noremap = true, desc = 'Push to Git' })
 keymap('n', '<leader>gr', ':Gread<cr>', { noremap = true, desc = 'Read from Git' })
 keymap('n', '<leader>gs', function()
-  telescope.git_status {
-    initial_mode = 'normal',
-    cwd = vim.fn.expand '%:p:h',
-  }
+  local dir = vim.fn.expand '%:p:h'
+  if vim.fn.isdirectory(dir) ~= 1 then
+    dir = vim.fn.getcwd()
+  end
+  telescope.git_status { initial_mode = 'normal', cwd = dir }
 end, { noremap = true, desc = 'Git status' })
 keymap('n', '<leader>gu', function()
   require('gitsigns').reset_hunk()
