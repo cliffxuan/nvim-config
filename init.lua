@@ -62,7 +62,22 @@ if not vim.uv.fs_stat(lazypath) then
   }
 end
 vim.opt.rtp:prepend(lazypath)
-require('lazy').setup 'lazyvim/plugins'
+require('lazy').setup('lazyvim/plugins', {
+  performance = {
+    rtp = {
+      disabled_plugins = {
+        'gzip',
+        'matchit',
+        'matchparen',
+        'netrwPlugin',
+        'tarPlugin',
+        'tohtml',
+        'tutor',
+        'zipPlugin',
+      },
+    },
+  },
+})
 
 vim.cmd [[
 " tabs {{{
@@ -239,16 +254,8 @@ endfunction
 " }}}
 ]]
 
-vim.cmd [[
-" global variables {{{
-  let g:terraform_align=1
+vim.g.terraform_align = 1
 
-  " python provider uses pynvim specific virtualenv
-  if !empty(glob('~/.virtualenvs/pynvim/bin/python3'))
-    let g:python3_host_prog = '~/.virtualenvs/pynvim/bin/python3'
-  endif
-" }}}
-]]
 require 'config'
 require 'keymaps'
 require 'clipboard'
