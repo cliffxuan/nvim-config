@@ -1,6 +1,7 @@
 return {
   {
     'nvim-treesitter/nvim-treesitter',
+    branch = 'master',
     build = ':TSUpdate',
     config = function()
       -- Compat shim for Neovim 0.12 + the frozen nvim-treesitter `master`.
