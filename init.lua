@@ -163,6 +163,7 @@ function! CopyFileName()
   let filename = expand('%:p')
   echo filename
   let @+ = filename
+  let @* = filename
 endfunction
 
 function! NumberToggle()
@@ -256,6 +257,6 @@ endfunction
 
 vim.g.terraform_align = 1
 
+require 'clipboard'
 require 'config'
 require 'keymaps'
-require 'clipboard'
