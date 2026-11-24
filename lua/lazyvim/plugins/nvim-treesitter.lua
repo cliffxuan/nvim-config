@@ -1,90 +1,80 @@
+-- nvim-treesitter `main` (the rewrite for Neovim 0.12+). It only installs
+-- parsers/queries; highlighting, folds and indent are switched on per buffer
+-- below. Needs the `tree-sitter` CLI (>= 0.26.1) and a C compiler on PATH.
+local ensure_installed = {
+  'c',
+  'lua',
+  'vim',
+  'vimdoc',
+  'query',
+  'javascript',
+  'typescript',
+  'tsx',
+  'html',
+  'css',
+  'rust',
+  'python',
+  'go',
+  'json',
+  'yaml',
+  'toml',
+  'bash',
+  'markdown',
+  'markdown_inline',
+  'dockerfile',
+}
+
+-- experimental and ships no highlight queries; let native htmldjango syntax
+-- handle jinja files instead (see vim.filetype.add in init.lua)
+local ignore_install = { htmldjango = true }
+
 return {
   {
     'nvim-treesitter/nvim-treesitter',
-    branch = 'master',
+    branch = 'main',
+    lazy = false, -- main does not support lazy-loading
     build = ':TSUpdate',
     config = function()
-      -- Compat shim for Neovim 0.12 + the frozen nvim-treesitter `master`.
-      -- master's query directive/predicate handlers expect `match[id]` to be a
-      -- single TSNode, relying on the `all = false` option to iter_matches.
-      -- Neovim 0.12 removed `all = false`, so `match[id]` is now always a list
-      -- of nodes; the handlers then pass a table to get_node_text/node:range()
-      -- and crash (e.g. set-lang-from-info-string! via render-markdown on
-      -- markdown code fences). Re-register master's handlers through a wrapper
-      -- that collapses the list back to a single node (its last element, which
-      -- matches the old single-node semantics), then restore the originals so
-      -- other plugins' 0.12-correct directives are left untouched.
-      -- Remove this once nvim-treesitter is migrated to the `main` branch.
-      do
-        local query = require('vim.treesitter.query')
-        local orig_directive = query.add_directive
-        local orig_predicate = query.add_predicate
-        local function collapse(match)
-          local out = {}
-          for id, node in pairs(match) do
-            -- a TSNode is userdata; a 0.12 capture list is a plain table
-            out[id] = type(node) == 'table' and node[#node] or node
-          end
-          return out
-        end
-        local function wrap(register)
-          return function(name, handler, opts)
-            return register(name, function(match, ...)
-              return handler(collapse(match), ...)
-            end, opts)
-          end
-        end
-        query.add_directive = wrap(orig_directive)
-        query.add_predicate = wrap(orig_predicate)
-        package.loaded['nvim-treesitter.query_predicates'] = nil
-        require('nvim-treesitter.query_predicates') -- re-register via wrappers
-        query.add_directive = orig_directive
-        query.add_predicate = orig_predicate
+      local ts = require 'nvim-treesitter'
+      ts.setup()
+      ts.install(ensure_installed) -- async; no-op when already installed
+
+      local available = {}
+      for _, lang in ipairs(ts.get_available()) do
+        available[lang] = true
       end
 
-      require('nvim-treesitter.install').prefer_git = true
-      require('nvim-treesitter.configs').setup {
-        ensure_installed = {
-          'c',
-          'lua',
-          'vim',
-          'vimdoc',
-          'query',
-          'javascript',
-          'typescript',
-          'tsx',
-          'html',
-          'css',
-          'rust',
-          'python',
-          'go',
-          'json',
-          'yaml',
-          'toml',
-          'bash',
-          'markdown',
-          'markdown_inline',
-          'dockerfile',
-        },
-        auto_install = true,
-        sync_install = false,
-        highlight = {
-          enable = true,
-          additional_vim_regex_highlighting = false,
-        },
-        indent = { enable = true },
-        modules = {},
-        -- experimental and ships no highlight queries; let native htmldjango
-        -- syntax handle jinja files instead (see vim.filetype.add in init.lua)
-        ignore_install = { 'htmldjango' },
-        fold = {
-          enable = true,
-        },
-      }
-      -- Set the foldmethod to use Treesitter. Use Neovim's native (C-backed)
-      -- foldexpr, not nvim-treesitter's legacy VimScript `nvim_treesitter#foldexpr()`
-      -- which is O(n^2) per redraw and freezes the UI on large/nested files
-      -- (e.g. opening a big JSON via Telescope, which forces several redraws).
+      local function enable(buf, lang)
+        if not vim.api.nvim_buf_is_valid(buf) or not pcall(vim.treesitter.start, buf, lang) then
+          return
+        end
+        -- experimental in main, but matches the old `indent = { enable = true }`
+        vim.bo[buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+      end
+
+      vim.api.nvim_create_autocmd('FileType', {
+        group = vim.api.nvim_create_augroup('treesitter_start', { clear = true }),
+        callback = function(args)
+          local buf = args.buf
+          local lang = vim.treesitter.language.get_lang(args.match)
+          if not lang or ignore_install[lang] then
+            return
+          end
+          if vim.treesitter.language.add(lang) then
+            enable(buf, lang)
+          elseif available[lang] then
+            -- replaces master's `auto_install = true`
+            ts.install({ lang }):await(function()
+              vim.schedule(function()
+                enable(buf, lang)
+              end)
+            end)
+          end
+        end,
+      })
+
+      -- Treesitter folds via Neovim's native (C-backed) foldexpr, not
+      -- nvim-treesitter's legacy VimScript foldexpr (O(n^2) per redraw).
       vim.opt.foldmethod = 'expr'
       vim.opt.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
       -- Start with folds closed
