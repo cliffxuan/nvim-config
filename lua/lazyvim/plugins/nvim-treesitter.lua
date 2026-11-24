@@ -81,4 +81,18 @@ return {
       vim.opt.foldlevel = 0
     end,
   },
+  {
+    -- textobjects.scm queries for mini.ai (af/if, ac/ic, ...) plus the move
+    -- functions used by after/ftplugin/python/python_fn.vim. Not lazy: mini.ai
+    -- needs the queries on runtimepath from startup.
+    'nvim-treesitter/nvim-treesitter-textobjects',
+    branch = 'main',
+    lazy = false,
+    dependencies = { 'nvim-treesitter/nvim-treesitter' },
+    config = function()
+      require('nvim-treesitter-textobjects').setup {
+        move = { set_jumps = true },
+      }
+    end,
+  },
 }

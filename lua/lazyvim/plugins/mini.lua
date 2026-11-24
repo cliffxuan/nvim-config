@@ -1,6 +1,21 @@
 return {
   'nvim-mini/mini.nvim',
   config = function()
+    -- treesitter-aware text objects; replaces jeetsukumaran/vim-pythonsense
+    -- and kana/vim-textobj-user. Queries come from nvim-treesitter-textobjects.
+    -- af/if = function, ac/ic = class, aF/iF = function call (mini's old `f`);
+    -- other built-ins (a, q, b, t, ...) unchanged.
+    local ai = require 'mini.ai'
+    ai.setup {
+      n_lines = 500,
+      custom_textobjects = {
+        f = ai.gen_spec.treesitter { a = '@function.outer', i = '@function.inner' },
+        c = ai.gen_spec.treesitter { a = '@class.outer', i = '@class.inner' },
+        F = ai.gen_spec.function_call(),
+      },
+      -- leave visual an/in to Neovim 0.12's treesitter incremental selection
+      mappings = { around_next = '', inside_next = '' },
+    }
     require('mini.align').setup()
     require('mini.basics').setup()
     require('mini.bracketed').setup() -- replaces tpope/vim-unimpaired

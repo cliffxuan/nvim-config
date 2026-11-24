@@ -20,7 +20,6 @@ return {
   'tpope/vim-endwise',
   'tpope/vim-fugitive',
   'tpope/vim-repeat',
-  'kana/vim-textobj-user',
   {
     'folke/trouble.nvim',
     opts = {},
@@ -77,7 +76,6 @@ return {
   'neovim/nvim-lspconfig',
   'nvim-lua/plenary.nvim',
   -- language specific
-  { 'jeetsukumaran/vim-pythonsense', ft = 'python' },
   { 'mrcjkb/rustaceanvim', ft = 'rust' },
   {
     'MeanderingProgrammer/render-markdown.nvim',

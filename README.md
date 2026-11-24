@@ -50,7 +50,7 @@ plugin/                      -- small vimscript helpers (run, file manager, etc.
 | Symbol outline | **aerial.nvim** (`<leader>uo`) |
 | AI | **CodeCompanion** (`<leader>a*`); commit msgs via `commit_msg.lua` |
 | Many small utils | **mini.nvim** — surround, bracketed, indentscope, jump, pairs, move, align, files, notify, tabline, starter, cursorword, splitjoin |
-| Misc | which-key, trouble, render-markdown, vim-abolish/endwise/repeat, vim-pythonsense |
+| Misc | which-key, trouble, render-markdown, vim-abolish/endwise/repeat |
 
 ## Key bindings
 

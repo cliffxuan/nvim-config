@@ -20,26 +20,28 @@ let b:loaded_py_ftplugin = 1
 
 setlocal foldmethod=indent
 
-" unmap the default m/M from the Pythonsense plugin for function
-let s:mappings = [
-      \ [']m', ']f', 'PythonsenseStartOfNextPythonFunction'], 
-      \ ['[m', '[f', 'PythonsenseStartOfPythonFunction'],
-      \ [']M', ']F', 'PythonsenseEndOfPythonFunction'], 
-      \ ['[M', '[F', 'PythonsenseEndOfPreviousPythonFunction'],
-\ ]
-      " \ [']]', ']c', 'PythonsenseStartOfNextPythonClass'], 
-      " \ ['[[', '[c', 'PythonsenseStartOfPythonClass'],
-      " \ ['[]', '[C', 'PythonsenseEndOfPreviousPythonClass'],
-      " \ ['][', ']C', 'PythonsenseEndOfPythonClass'], 
-for s:m in s:mappings
-  let s:old = s:m[0]
-  let s:new = s:m[1]
-  let s:name = '<Plug>(' . s:m[2] . ')'
-  if mapcheck(s:old) == s:name
-    execute join(['unmap <buffer>' . s:old], ' ')
-  endif
-  execute join(['map <buffer>', s:new, s:name], ' ')
-endfor
+" function/class motions (formerly vim-pythonsense), via
+" nvim-treesitter-textobjects. Overrides the regex-based ]] [[ ][ [] from
+" Neovim's runtime python ftplugin.
+lua << EOF
+local function move(fn, query)
+  return function()
+    require('nvim-treesitter-textobjects.move')[fn](query, 'textobjects')
+  end
+end
+for lhs, spec in pairs {
+  [']f'] = { 'goto_next_start', '@function.outer', 'Next function start' },
+  ['[f'] = { 'goto_previous_start', '@function.outer', 'Previous function start' },
+  [']F'] = { 'goto_next_end', '@function.outer', 'Next function end' },
+  ['[F'] = { 'goto_previous_end', '@function.outer', 'Previous function end' },
+  [']]'] = { 'goto_next_start', '@class.outer', 'Next class start' },
+  ['[['] = { 'goto_previous_start', '@class.outer', 'Previous class start' },
+  ['[]'] = { 'goto_previous_end', '@class.outer', 'Previous class end' },
+  [']['] = { 'goto_next_end', '@class.outer', 'Next class end' },
+} do
+  vim.keymap.set({ 'n', 'x', 'o' }, lhs, move(spec[1], spec[2]), { buffer = true, desc = spec[3] })
+end
+EOF
 
 "   Jump to next line with the same/lower indentation
 noremap <buffer> ]t   :call PythonNextLine(1)<CR>
